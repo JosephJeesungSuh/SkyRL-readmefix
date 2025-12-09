@@ -10,7 +10,7 @@ set -x
 
 DATA_DIR="$HOME/data/gsm8k_multi_turn"
 ENV_CLASS="gsm8k_multi_turn"
-NUM_GPUS=1
+NUM_GPUS=4
 LOGGER="wandb"  # or "console" to print to stdout
 
 INFERENCE_BACKEND="vllm"  # or "sglang"
@@ -19,7 +19,7 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
-  trainer.policy.model.path="Qwen/Qwen2.5-0.5B-Instruct" \
+  trainer.policy.model.path="Qwen/Qwen2.5-1.5B-Instruct" \
   trainer.placement.colocate_all=true \
   trainer.strategy=fsdp2 \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
@@ -32,9 +32,9 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.eval_interval=5 \
   trainer.update_epochs_per_batch=1 \
   trainer.train_batch_size=256 \
-  trainer.policy_mini_batch_size=128 \
-  trainer.micro_forward_batch_size_per_gpu=32 \
-  trainer.micro_train_batch_size_per_gpu=32 \
+  trainer.policy_mini_batch_size=256 \
+  trainer.micro_forward_batch_size_per_gpu=64 \
+  trainer.micro_train_batch_size_per_gpu=64 \
   trainer.ckpt_interval=-1 \
   trainer.max_prompt_length=512 \
   generator.sampling_params.max_generate_length=1024 \

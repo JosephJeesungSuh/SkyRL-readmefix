@@ -298,6 +298,9 @@ generator:
   rope_scaling: ${trainer.rope_scaling}
   rope_theta: ${trainer.rope_theta}
 
+  # custom config
+  rollout_log_path: null
+
 environment:
   env_class: "gsm8k"
   # NOTE: environment specific defaults for environment.skyrl_gym are set at the following path:

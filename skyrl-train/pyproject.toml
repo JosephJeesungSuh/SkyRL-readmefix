@@ -119,7 +119,7 @@ sandboxes = [
 ]
 vllm = [
     "vllm==0.11.0",
-    "flash-attn==2.8.3",
+    "flash-attn @ file:///nas/ucb/jjssuh/wheels/flash_attn-2.8.0.post2-cp312-cp312-linux_x86_64.whl",
     "torch==2.8.0",
     "flashinfer-python",
     "flashinfer-jit-cache",

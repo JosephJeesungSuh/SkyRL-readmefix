@@ -9,7 +9,8 @@ set -x
 # path for dataset (.parquet files) containing the prompts and metadata for each question
 DATA_DIR="$HOME/data/searchR1"
 
-uv run --isolated --frozen --extra vllm -m skyrl_train.entrypoints.main_base \
+# --frozen
+uv run --isolated --extra vllm -m skyrl_train.entrypoints.main_base \
   data.train_data="['${DATA_DIR}/train.parquet']" \
   data.val_data="['${DATA_DIR}/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
@@ -23,10 +24,10 @@ uv run --isolated --frozen --extra vllm -m skyrl_train.entrypoints.main_base \
   trainer.strategy=fsdp2 \
   trainer.policy.fsdp_config.cpu_offload=false \
   trainer.ref.fsdp_config.cpu_offload=true \
-  trainer.placement.policy_num_gpus_per_node=8 \
-  trainer.placement.ref_num_gpus_per_node=8 \
-  generator.num_inference_engines=4 \
-  generator.inference_engine_tensor_parallel_size=2 \
+  trainer.placement.policy_num_gpus_per_node=4 \
+  trainer.placement.ref_num_gpus_per_node=4 \
+  generator.num_inference_engines=1 \
+  generator.inference_engine_tensor_parallel_size=4 \
   generator.backend=vllm \
   generator.run_engines_locally=true \
   generator.weight_sync_backend=nccl \

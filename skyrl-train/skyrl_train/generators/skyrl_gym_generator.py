@@ -7,6 +7,7 @@ For details, see https://skyrl.readthedocs.io/en/latest/tutorials/skyrl_gym_gene
 
 import asyncio
 import copy
+import json
 from uuid import uuid4
 import skyrl_gym
 from typing import List, Dict, Any, Optional, Union, Tuple
@@ -15,7 +16,7 @@ from tqdm.asyncio import tqdm
 from dataclasses import dataclass
 from loguru import logger
 
-from skyrl_train.generators.base import GeneratorInterface, GeneratorInput, GeneratorOutput, TrajectoryID
+from skyrl_train.generators.base import GeneratorInterface, GeneratorInput, GeneratorOutput, TrajectoryID, TrainingPhase
 from skyrl_train.inference_engines.inference_engine_client import InferenceEngineClient
 from skyrl_train.inference_engines.base import InferenceEngineInput, ConversationType
 from omegaconf import DictConfig
@@ -63,6 +64,7 @@ class SkyRLGymGenerator(GeneratorInterface):
         self.max_turns = generator_cfg.max_turns
         self.batched = generator_cfg.batched
         self.use_conversation_multi_turn = generator_cfg.use_conversation_multi_turn
+        self.rollout_log_path = generator_cfg.get("rollout_log_path", None)
         # optionally use custom chat template to get loss masks (i.e. for Qwen3)
         self.custom_chat_template = get_custom_chat_template(generator_cfg.chat_template)
         # get generation prompt ids for the tokenizer if needed
@@ -334,6 +336,8 @@ class SkyRLGymGenerator(GeneratorInterface):
         max_tokens: int,
         max_input_length: int,
         sampling_params: Optional[Dict[str, Any]] = None,
+        training_step: Optional[int] = None,
+        training_phase: Optional[TrainingPhase] = None,
     ) -> GeneratorOutput:
         """
         Single-turn batched generation (can use the synchronous offline engine)
@@ -403,6 +407,16 @@ class SkyRLGymGenerator(GeneratorInterface):
         if self.generator_cfg.apply_overlong_filtering:
             loss_masks = apply_overlong_filtering(loss_masks, responses, self.tokenizer.eos_token_id)
 
+        self._log_rollouts(
+            prompt_token_ids,
+            truncated_responses,
+            rewards,
+            stop_reasons,
+            truncated_logprobs,
+            training_step,
+            training_phase,
+        )
+
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
             "response_ids": truncated_responses,
@@ -431,12 +445,18 @@ class SkyRLGymGenerator(GeneratorInterface):
         env_extras = input_batch["env_extras"]
         trajectory_ids = input_batch.get("trajectory_ids", None)
         sampling_params: Optional[dict] = input_batch.get("sampling_params", None)
+        batch_metadata = input_batch.get("batch_metadata")
+        training_step = getattr(batch_metadata, "global_step", None) if batch_metadata is not None else None
+        training_phase: Optional[TrainingPhase] = (
+            getattr(batch_metadata, "training_phase", None) if batch_metadata is not None else None
+        )
         max_tokens = self.generator_cfg.sampling_params.max_generate_length
         max_input_length = self.generator_cfg.max_input_length
 
         if self.batched:
             return await self.generate_batched(
-                prompts, env_classes, env_extras, max_tokens, max_input_length, sampling_params
+                prompts, env_classes, env_extras, max_tokens, max_input_length, sampling_params,
+                training_step, training_phase
             )
 
         # Async agent loop to generate trajectories in parallel.
@@ -489,6 +509,16 @@ class SkyRLGymGenerator(GeneratorInterface):
 
         if self.generator_cfg.apply_overlong_filtering:
             loss_masks = apply_overlong_filtering(loss_masks, responses, self.tokenizer.eos_token_id)
+        
+        self._log_rollouts(
+            prompt_token_ids,
+            responses,
+            rewards,
+            stop_reasons,
+            rollout_logprobs,
+            training_step,
+            training_phase,
+        )
 
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
@@ -501,6 +531,43 @@ class SkyRLGymGenerator(GeneratorInterface):
         }
 
         return generator_output
+
+    def _log_rollouts(
+        self,
+        prompt_token_ids: List[List[int]],
+        responses: List[List[int]],
+        rewards: List[Union[List[float], float]],
+        stop_reasons: List[str],
+        rollout_logprobs: Optional[List[Optional[List[float]]]],
+        training_step: Optional[int],
+        training_phase: Optional[TrainingPhase],
+    ) -> None:
+        """Append rollout information to a JSONL file if ``rollout_log_path`` is set."""
+
+        if self.rollout_log_path is None:
+            return
+
+        logprobs = rollout_logprobs if rollout_logprobs is not None else [None] * len(responses)
+
+        with open(self.rollout_log_path, "a", encoding="utf-8") as f:
+            for prompt_ids, response_ids, reward, stop_reason, sample_logprobs in zip(
+                prompt_token_ids, responses, rewards, stop_reasons, logprobs
+            ):
+                f.write(
+                    json.dumps(
+                        {
+                            "prompt": self.tokenizer.decode(prompt_ids, skip_special_tokens=False),
+                            "response": self.tokenizer.decode(response_ids, skip_special_tokens=False),
+                            "reward": reward,
+                            "stop_reason": stop_reason,
+                            "rollout_logprobs": sample_logprobs,
+                            "training_step": training_step,
+                            "training_phase": training_phase,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
 
     def _zero_reward_if_not_stop(self, rewards: List[float], stop_reasons: List[str]):
         """Sets the reward to 0 if the stop reason is not "stop".

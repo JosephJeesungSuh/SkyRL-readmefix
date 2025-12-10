@@ -6,13 +6,13 @@ set -x
 # bash examples/multiply/run_multiply.sh
 
 DATA_DIR="$HOME/data/multiply"
-NUM_GPUS=4
+NUM_GPUS=1
 
 uv run --isolated --extra vllm -m examples.multiply.main_multiply \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
-  trainer.policy.model.path="Qwen/Qwen2.5-1.5B-Instruct" \
+  trainer.policy.model.path="Qwen/Qwen2.5-0.5B-Instruct" \
   trainer.placement.colocate_all=true \
   trainer.strategy=fsdp2 \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
@@ -22,10 +22,10 @@ uv run --isolated --extra vllm -m examples.multiply.main_multiply \
   trainer.epochs=20 \
   trainer.update_epochs_per_batch=1 \
   trainer.train_batch_size=1024 \
-  trainer.policy_mini_batch_size=256 \
-  trainer.critic_mini_batch_size=256 \
-  trainer.micro_forward_batch_size_per_gpu=64 \
-  trainer.micro_train_batch_size_per_gpu=64 \
+  trainer.policy_mini_batch_size=128 \
+  trainer.critic_mini_batch_size=128 \
+  trainer.micro_forward_batch_size_per_gpu=32 \
+  trainer.micro_train_batch_size_per_gpu=32 \
   trainer.eval_batch_size=1024 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \

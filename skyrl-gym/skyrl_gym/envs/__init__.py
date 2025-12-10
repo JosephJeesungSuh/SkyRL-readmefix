@@ -36,3 +36,8 @@ register(
     id="searchcode",
     entry_point="skyrl_gym.envs.searchcode.env:SearchCodeEnv",
 )
+
+register(
+    id="lost_in_conversation",
+    entry_point="skyrl_gym.envs.lost_in_conversation.env:LostInConversationEnv",
+)

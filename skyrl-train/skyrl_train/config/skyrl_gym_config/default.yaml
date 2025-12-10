@@ -14,3 +14,12 @@ search:
   search_url: "http://127.0.0.1:8000/retrieve"
   topk: 3
   timeout: 30
+
+
+lost_in_conversation:
+  dataset_path: "lost_in_conversation/data/sharded_instructions_600.json"
+  assistant_model: "gpt-4o-mini"
+  system_model: "gpt-4o-mini"
+  user_model: "gpt-4o-mini"
+  assistant_temperature: 1.0
+  user_temperature: 1.0

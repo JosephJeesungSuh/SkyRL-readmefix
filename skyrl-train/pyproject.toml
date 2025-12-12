@@ -43,6 +43,9 @@ dependencies = [
     "s3fs",
     "fastapi",
     "uvicorn",
+    "openai>=2.7.1",
+    "sqlparse>=0.5.4",
+    "sacrebleu>=2.5.1",
 ]
 
 [tool.uv]

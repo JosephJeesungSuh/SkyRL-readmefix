@@ -1,63 +1,100 @@
-"""Convert the Lost in Conversation sharded instructions into a SkyRL dataset."""
-
-from __future__ import annotations
+# last update: 2025-12-12 (Fri)
 
 import argparse
 import json
+import os
+import random
+import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
+
+from datasets import Dataset
 
 
-DEFAULT_INPUT = Path(__file__).resolve().parents[3] / "lost_in_conversation" / "data" / "sharded_instructions_600.json"
-DEFAULT_OUTPUT = Path(__file__).with_name("lost_in_conversation.jsonl")
+REPO_ROOT = Path(__file__).resolve().parents[2].parent
+LIC_ROOT = REPO_ROOT / "lost_in_conversation"
+sys.path.insert(0, str(LIC_ROOT))
 
 
-def load_samples(input_path: Path) -> List[Dict[str, Any]]:
-    with input_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+def build_initial_prompt(sample: Dict) -> List[Dict[str, str]]:
+    """Create the initial system + user turn that the assistant sees.
+
+    This mirrors the behavior in ``ConversationSimulatorSharded`` where the
+    system prompt is emitted once and the first shard is provided as the first
+    user turn before the assistant responds.
+    """
+
+    @contextmanager
+    def _chdir(path: Path):
+        prev = Path.cwd()
+        os.chdir(path)
+        try:
+            yield
+        finally:
+            os.chdir(prev)
+
+    with _chdir(LIC_ROOT):
+        from tasks import get_task 
+        task = get_task(sample["task"])
+        system_prompt = task.generate_system_prompt(sample)
+        first_shard = sample["shards"][0]["shard"]
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": first_shard},
+        ]
 
 
-def build_records(samples: List[Dict[str, Any]], args: argparse.Namespace) -> List[Dict[str, Any]]:
-    records: List[Dict[str, Any]] = []
-    for sample in samples:
-        records.append(
-            {
-                "prompt": [],
-                "env_class": "lost_in_conversation",
-                "env_extras": {
-                    "sample": sample,
-                    "assistant_model": args.assistant_model,
-                    "system_model": args.system_model,
-                    "user_model": args.user_model,
-                    "assistant_temperature": args.assistant_temperature,
-                    "user_temperature": args.user_temperature,
-                    "dataset_fn": str(args.input_path),
-                    "data_source": sample.get("task"),
-                },
-            }
-        )
-    return records
+def make_split(data: List[Dict], split_ratio: float) -> tuple[list[Dict], list[Dict]]:
+    split = int(len(data) * split_ratio)
+    return data[:split], data[split:]
 
 
-def write_records(records: List[Dict[str, Any]], output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as f:
-        for rec in records:
-            f.write(json.dumps(rec) + "\n")
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset_path", default=str(LIC_ROOT / "data/sharded_instructions_600.json"))
+    parser.add_argument("--output_dir", default=os.path.expanduser("~/data/lost_in_conversation"))
+    parser.add_argument("--train_ratio", type=float, default=0.85)
+    args = parser.parse_args()
+
+    with open(args.dataset_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    random.Random(42).shuffle(data)
+    train, validation = make_split(data, args.train_ratio)
+
+    def to_row(sample: Dict, split: str):
+        """
+        sample has different nested structure based on the task (e.g., data-to-text, math, etc.)
+        data-to-text keys: ['task_id', 'task', 'original_task_id', 'raw_table', 'fewshot_descriptions', 'table_html', 'metadata', 'table_highlighted_html', 'references', 'shards']
+        math keys: ['question', 'answer', 'task_id', 'shards', 'task']
+        """
+        prompt = build_initial_prompt(sample)
+        return {
+            "prompt": prompt,
+            "env_class": "lost_in_conversation",
+            "dataset_fn": str(args.dataset_path),
+            "task": str(sample.get("task") or ""),
+            "task_id": str(sample.get("task_id") or ""),
+            "split": split,
+            "num_shards": int(len(sample.get("shards", []))),
+            "sample_json": json.dumps(sample, ensure_ascii=False),
+        }
+        
+    train_rows = [to_row(sample, "train") for sample in train]
+    validation_rows = [to_row(sample, "validation") for sample in validation]
+
+    output_dir = Path(args.output_dir).expanduser()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    import pdb; pdb.set_trace()
+
+    Dataset.from_list(train_rows).to_parquet(output_dir / "train.parquet")
+    Dataset.from_list(validation_rows).to_parquet(output_dir / "validation.parquet")
+
+    print(f"Wrote {len(train_rows)} training rows and {len(validation_rows)} validation rows to {output_dir}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input_path", type=Path, default=DEFAULT_INPUT, help="Path to sharded_instructions_600.json")
-    parser.add_argument("--output_path", type=Path, default=DEFAULT_OUTPUT, help="Where to write the SkyRL dataset")
-    parser.add_argument("--assistant_model", type=str, default="gpt-4o-mini")
-    parser.add_argument("--system_model", type=str, default="gpt-4o-mini")
-    parser.add_argument("--user_model", type=str, default="gpt-4o-mini")
-    parser.add_argument("--assistant_temperature", type=float, default=1.0)
-    parser.add_argument("--user_temperature", type=float, default=1.0)
-
-    args = parser.parse_args()
-    samples = load_samples(args.input_path)
-    records = build_records(samples, args)
-    write_records(records, args.output_path)
-    print(f"Wrote {len(records)} records to {args.output_path}")
+    print("current repo root: ", REPO_ROOT)
+    main()

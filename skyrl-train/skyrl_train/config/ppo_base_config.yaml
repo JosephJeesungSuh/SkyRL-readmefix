@@ -233,6 +233,14 @@ generator:
   http_endpoint_port: 8000
   max_turns: 1
 
+  ### custom: Prompt reformulation for user simulation ###
+  user_simulator:
+    enabled: false
+    model_name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
+    base_url: "http://localhost:8001"
+    system_prompt: "You are a user of a conversational AI assistant. You reformulate your question in your own words and occasionally make mistakes."
+    temperature: 0.7
+
   # chat template configuration
   chat_template:
     source: "name"  # "name" or "file"

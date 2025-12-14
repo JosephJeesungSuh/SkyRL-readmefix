@@ -17,6 +17,8 @@ set -x
 : "${INFERENCE_BACKEND:=vllm}"
 # : "${INFERENCE_BACKEND:=sglang}"
 
+## always make sure no space after the backslash `\` at the end of the line
+
 uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_base \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
@@ -57,4 +59,5 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.resume_mode=null \
   trainer.ckpt_path="$HOME/ckpts/gsm8k_qwen2p5_1p5B_ckpt" \
   generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts.jsonl" \
+  generator.user_simulator.enabled=true \
   $@

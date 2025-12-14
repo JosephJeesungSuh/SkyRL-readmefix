@@ -46,6 +46,8 @@ dependencies = [
     "openai>=2.7.1",
     "sqlparse>=0.5.4",
     "sacrebleu>=2.5.1",
+    "pymongo>=4.15.5",
+    "nltk>=3.9.2",
 ]
 
 [tool.uv]

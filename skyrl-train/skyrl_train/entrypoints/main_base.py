@@ -318,8 +318,21 @@ class BasePPOExp:
 @ray.remote(num_cpus=1)
 def skyrl_entrypoint(cfg: DictConfig):
     # make sure that the training loop is not run on the head node.
-    exp = BasePPOExp(cfg)
-    exp.run()
+    
+    if cfg.generator.user_simulator.enabled:
+        # check the connection before start
+        from skyrl_train.generators.user_simulator import UserSimulator
+        user_simulator = UserSimulator.from_config(cfg.generator.user_simulator)
+        test_output = (
+            user_simulator.rewrite_sync([
+                {"role": "user", "content": "What is the capital of France?"}
+            ])
+        )
+        logger.info(f"User simulator test output: {test_output}")
+        del user_simulator
+
+    # exp = BasePPOExp(cfg)
+    # exp.run()
 
 
 @hydra.main(config_path=config_dir, config_name="ppo_base_config", version_base=None)

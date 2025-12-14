@@ -12,8 +12,7 @@ from omegaconf import DictConfig
 from openai import AsyncOpenAI
 
 from skyrl_train.inference_engines.base import ConversationType
-
-REPO_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
+from .user_simulator_prompt import USER_SIM_SYSPROMPT
 
 
 class UserSimulator:
@@ -32,14 +31,11 @@ class UserSimulator:
             client = AsyncOpenAI(base_url=base_url)
         else:
             raise NotImplementedError("Only local vllm model is supported for UserSimulator.")
-        # load system prompt
-        prompt_path = os.path.join(REPO_ROOT, cfg.get("system_prompt_filepath"))
-        ns = runpy.run_path(prompt_path)
         # note that system_prompt has {} formatting with task_desc, single_turn_prompt, chat_history, terminal_signal
         return cls(
             client=client,
             model_name=cfg.model_name,
-            system_prompt=ns["USER_SIM_SYSPROMPT"],
+            system_prompt=USER_SIM_SYSPROMPT,
             temperature=cfg.temperature,
         )
     
@@ -64,7 +60,8 @@ class UserSimulator:
                       task_desc: str,
                       single_turn_prompt: str,
                       formatting_cfg: Dict,
-                      debug: bool = False) -> ConversationType:
+                      debug: bool = False,
+                      **kwargs) -> ConversationType:
 
         messages = [
             {"role": "user", "content": self._system_prompt.format(
@@ -79,6 +76,12 @@ class UserSimulator:
         ]
         if debug:
             logger.info(f"messages to user simulator: {messages}")
+            if 'model_name' in kwargs:
+                from transformers import AutoProcessor
+                processor = AutoProcessor.from_pretrained(kwargs['model_name'])
+                logger.info("apply_chat_template result: "
+                            f"{processor.apply_chat_template(
+                                messages, tokenize=False, add_generation_prompt=True)}")
         try:
             completion = await self._client.chat.completions.create(
                 model=self._model, messages=messages, temperature=self._temperature

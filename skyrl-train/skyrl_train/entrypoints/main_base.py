@@ -333,6 +333,7 @@ def skyrl_entrypoint(cfg: DictConfig):
                     "ai_template": "AI: ",
                     "terminal_signal": "<END_OF_CONVERSATION>",
                 },
+                debug=True, model_name=cfg.generator.user_simulator.model_name
             )
         )
         logger.info(f"User simulator test output: {test_output}")

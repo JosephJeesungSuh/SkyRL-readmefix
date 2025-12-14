@@ -237,7 +237,7 @@ generator:
   user_simulator:
     enabled: false
     model_name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
-    base_url: "http://localhost:8001"
+    base_url: "http://localhost:8000/v1"
     system_prompt: "You are a user of a conversational AI assistant. You reformulate your question in your own words and occasionally make mistakes."
     temperature: 0.7
 

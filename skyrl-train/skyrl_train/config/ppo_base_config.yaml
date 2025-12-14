@@ -237,8 +237,10 @@ generator:
   user_simulator:
     enabled: false
     model_name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
-    base_url: "http://localhost:8000/v1"
-    system_prompt: "You are a user of a conversational AI assistant. You reformulate your question in your own words and occasionally make mistakes."
+    base_url: "http://localhost:{port}/v1"
+    is_local: true
+    local_port: 8002
+    system_prompt_filepath: "skyrl-gym/skyrl_gym/envs/collabllm/user_simulator_prompt.json"
     temperature: 0.7
 
   # chat template configuration

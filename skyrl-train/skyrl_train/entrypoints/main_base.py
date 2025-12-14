@@ -324,9 +324,16 @@ def skyrl_entrypoint(cfg: DictConfig):
         from skyrl_train.generators.user_simulator import UserSimulator
         user_simulator = UserSimulator.from_config(cfg.generator.user_simulator)
         test_output = (
-            user_simulator.rewrite_sync([
-                {"role": "user", "content": "What is the capital of France?"}
-            ])
+            user_simulator.rewrite_sync(
+                chat_history = [],
+                task_desc = "question answering",
+                single_turn_prompt = "what is the capital of France?",
+                formatting_cfg = {
+                    "user_template": "User: ",
+                    "ai_template": "AI: ",
+                    "terminal_signal": "<END_OF_CONVERSATION>",
+                },
+            )
         )
         logger.info(f"User simulator test output: {test_output}")
         del user_simulator

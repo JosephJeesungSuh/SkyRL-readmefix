@@ -339,8 +339,8 @@ def skyrl_entrypoint(cfg: DictConfig):
         logger.info(f"User simulator test output: {test_output}")
         del user_simulator
 
-    # exp = BasePPOExp(cfg)
-    # exp.run()
+    exp = BasePPOExp(cfg)
+    exp.run()
 
 
 @hydra.main(config_path=config_dir, config_name="ppo_base_config", version_base=None)

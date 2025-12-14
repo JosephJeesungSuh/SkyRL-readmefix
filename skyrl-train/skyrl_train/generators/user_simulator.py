@@ -22,6 +22,7 @@ class UserSimulator:
         self._model = model_name
         self._system_prompt = system_prompt
         self._temperature = temperature
+        self._max_retries = 8
 
     @classmethod
     def from_config(cls, cfg: DictConfig) -> "UserSimulator":
@@ -74,6 +75,7 @@ class UserSimulator:
                 terminal_signal=formatting_cfg.get("terminal_signal"),
             )}
         ]
+
         if debug:
             logger.info(f"messages to user simulator: {messages}")
             if 'model_name' in kwargs:
@@ -81,14 +83,22 @@ class UserSimulator:
                 processor = AutoProcessor.from_pretrained(kwargs['model_name'])
                 logger.info("apply_chat_template result: "
                             f"{processor.apply_chat_template(
-                                messages, tokenize=False, add_generation_prompt=True)}")
-        try:
-            completion = await self._client.chat.completions.create(
-                model=self._model, messages=messages, temperature=self._temperature
-            )
-        except Exception:
-            logger.exception("Prompt rewriting failed; falling back to the original prompt.")
-            return None
+                                messages, tokenize=False,
+                                add_generation_prompt=True)}")            
+
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                completion = await self._client.chat.completions.create(
+                    model=self._model, messages=messages, temperature=self._temperature
+                )
+                break
+            except Exception:
+                logger.exception("Prompt rewriting failed on attempt %d/%d.", attempt, self._max_retries)
+                if attempt < self._max_retries:
+                    await asyncio.sleep(2 ** (attempt - 1))
+                else:
+                    logger.error("All prompt rewriting attempts failed.")
+                    return None
 
         rewritten_content: Optional[str] = completion.choices[0].message.content
         if not rewritten_content:

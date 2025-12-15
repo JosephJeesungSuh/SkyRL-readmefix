@@ -84,7 +84,7 @@ class UserSimulator:
                 logger.info("apply_chat_template result: "
                             f"{processor.apply_chat_template(
                                 messages, tokenize=False,
-                                add_generation_prompt=True)}")            
+                                add_generation_prompt=True)}")
 
         for attempt in range(1, self._max_retries + 1):
             try:

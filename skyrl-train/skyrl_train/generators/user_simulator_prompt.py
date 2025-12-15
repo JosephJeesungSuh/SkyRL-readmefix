@@ -48,7 +48,7 @@ You should output a JSON object with three entries:
 Remember to stay in character as a user throughout your response, and follow the instructions and guidelines carefully."""
 
 DATASETS_INFO = {
-    'math-hard': {
+    'collabllm-style-math': {
         'task_desc': 'question answering',
     },
     'abg-coqa': {

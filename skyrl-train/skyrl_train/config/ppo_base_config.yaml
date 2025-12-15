@@ -242,6 +242,11 @@ generator:
     local_port: 8002
     system_prompt_filepath: "user_simulator_prompt.py"
     temperature: 0.7
+    default_task_desc: "question answering"
+    formatting:
+      user_template: "User: "
+      ai_template: "AI: "
+      terminal_signal: "<END_OF_CONVERSATION>"
 
   # chat template configuration
   chat_template:

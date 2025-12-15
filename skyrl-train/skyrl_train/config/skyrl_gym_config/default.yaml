@@ -23,3 +23,14 @@ collabllm_math_500:
     is_local: true
     local_port: 8002
     temperature: 0.0
+  user_simulator:
+    enabled: false
+    model_name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
+    base_url: "http://localhost:{port}/v1"
+    is_local: true
+    local_port: 8002
+    temperature: 0.7
+    formatting:
+      user_template: "User: "
+      ai_template: "AI: "
+      terminal_signal: "<END_OF_CONVERSATION>"

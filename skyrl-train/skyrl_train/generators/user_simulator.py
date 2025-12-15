@@ -16,6 +16,24 @@ from .user_simulator_custom_utils import extract_outer_dict
 from .user_simulator_prompt import USER_SIM_SYSPROMPT
 
 
+def usersim_stringfy(
+    conversation: ConversationType,
+    formatting_cfg: Dict
+) -> Optional[str]:
+    """
+    Convert conversation messages to a formatted chat history string to be used in the system prompt.
+    """
+    user_tpl = formatting_cfg.get("user_template")
+    ai_tpl = formatting_cfg.get("ai_template")
+    chat_history_str = ""
+    for message in conversation:
+        if message["role"] not in ["user", "assistant"]:
+            continue
+        tpl = user_tpl if message["role"] == "user" else ai_tpl
+        chat_history_str += tpl + message["content"] + "\n\n"
+    return chat_history_str
+
+
 class UserSimulator:
     
     def __init__(self, client: AsyncOpenAI, model_name: str, system_prompt: str, temperature: float) -> None:
@@ -40,22 +58,6 @@ class UserSimulator:
             system_prompt=USER_SIM_SYSPROMPT,
             temperature=cfg.temperature,
         )
-    
-    def _stringfy(self,
-                  conversation: ConversationType,
-                  formatting_cfg: Dict) -> Optional[str]:
-        """
-        Convert conversation messages to a formatted chat history string to be used in the system prompt.
-        """
-        user_tpl = formatting_cfg.get("user_template")
-        ai_tpl = formatting_cfg.get("ai_template")
-        chat_history_str = ""
-        for message in conversation:
-            if message["role"] not in ["user", "assistant"]:
-                continue
-            tpl = user_tpl if message["role"] == "user" else ai_tpl
-            chat_history_str += tpl + message["content"] + "\n\n"
-        return chat_history_str
 
     async def rewrite(self,
                       chat_history: ConversationType,
@@ -69,7 +71,7 @@ class UserSimulator:
             {"role": "user", "content": self._system_prompt.format(
                 task_desc=task_desc,
                 single_turn_prompt=single_turn_prompt,
-                chat_history=self._stringfy(
+                chat_history=usersim_stringfy(
                     conversation=chat_history,
                     formatting_cfg=formatting_cfg,
                 ),
@@ -100,9 +102,12 @@ class UserSimulator:
                 return parsed_dict["response"]
             except Exception:
                 if rewritten_content is None:
-                    logger.exception("Attempt %d/%d: rewriting failed.", attempt, self._max_retries)
+                    logger.exception(f"Attempt {attempt}/{self._max_retries}: rewriting failed.")
                 else:
-                    logger.exception("Attempt %d/%d: extracting from rewriting failed.", attempt, self._max_retries)
+                    logger.exception(
+                        f"Attempt {attempt}/{self._max_retries}: extracting from rewriting failed "
+                        f"with content: {rewritten_content}"
+                    )
                 if attempt < self._max_retries:
                     await asyncio.sleep(2 ** (attempt - 1))
                 else:

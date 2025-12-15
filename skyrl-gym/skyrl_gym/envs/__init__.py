@@ -41,3 +41,8 @@ register(
     id="collabllm_math_500",
     entry_point="skyrl_gym.envs.collabllm.env:CollabLLMLLMJudgeEnv",
 )
+
+register(
+    id="collabllm_math_500_multiturn",
+    entry_point="skyrl_gym.envs.collabllm.env:CollabLLMLLMJudgeMultiTurnEnv",
+)

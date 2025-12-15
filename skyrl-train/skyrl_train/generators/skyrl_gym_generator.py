@@ -28,6 +28,10 @@ from skyrl_train.generators.utils import (
     get_rollout_metrics,
 )
 
+from skyrl_train.generators.user_simulator import UserSimulator
+from skyrl_train.generators.user_simulator_prompt import DATASETS_INFO
+from skyrl_train.generators.user_simulator_custom_utils import robust_json_loads
+
 
 @dataclass
 class AgentLoopOutput:
@@ -69,6 +73,16 @@ class SkyRLGymGenerator(GeneratorInterface):
         self.custom_chat_template = get_custom_chat_template(generator_cfg.chat_template)
         # get generation prompt ids for the tokenizer if needed
         self.generation_prompt_ids = get_generation_prompt_ids(tokenizer) if self.use_conversation_multi_turn else None
+
+        ### custom : user simulator
+        self.user_simulator = None
+        self.user_simulator_formatting_cfg = None
+        if generator_cfg.user_simulator.enabled:
+            self.user_simulator = UserSimulator.from_config(generator_cfg.user_simulator)
+            self.user_simulator_formatting_cfg = (
+                generator_cfg.user_simulator.formatting
+            ) # includes: user_template, ai_template, terminal_signal
+
         if self.skyrl_gym_cfg.max_env_workers > 0:
             self.env_executor = ThreadPoolExecutor(
                 max_workers=self.skyrl_gym_cfg.max_env_workers, thread_name_prefix="skyrl-gym-env-"
@@ -116,7 +130,71 @@ class SkyRLGymGenerator(GeneratorInterface):
             return await loop.run_in_executor(executor, func, *args, **kwargs)
         else:
             return func(*args, **kwargs)
+        
+    def _replace_user_message(
+        self,
+        message: ConversationType,
+        rewritten: str
+    ) -> ConversationType:
+        """
+        Replace the last user message in the conversation with the rewritten content.
+        """
+        rewritten_message = copy.deepcopy(message)
+        assert len(rewritten_message) > 0 and rewritten_message[-1]["role"] == "user", (
+            "Messages to replace must be non-empty and the "
+            "last message in the prompt must be from the user."
+        )
 
+        try:
+            parsed = robust_json_loads(rewritten)
+            if isinstance(parsed, dict):
+                rewritten = parsed.get("response", rewritten)
+        except Exception:
+            # Fall back to using the raw response from the simulator
+            logger.warning("Failed to parse rewritten prompt JSON. Using raw response.")
+            logger.warning(f"Rewritten content: {rewritten}")
+            pass
+
+        rewritten_message[-1]["content"] = rewritten
+        return rewritten_message
+
+    async def _rewrite_prompts(
+            self,
+            messages: List[ConversationType],
+            env_extras: List[Dict[str, Any]],
+            debug: bool = False,
+        ) -> List[ConversationType]:
+        """
+        Called at the beginning of multi-turn conversation generation to rewrite the initial prompts
+        """
+        assert self.user_simulator is not None, "User simulator not initialized but _rewrite_prompts called."
+
+        rewrite_tasks = []
+        for message, env_extra in zip(messages, env_extras):
+            assert len(message) > 0 and message[-1]["role"] == "user", (
+                "Messages to rewrite must be non-empty and the "
+                "last message in the prompt must be from the user."
+            )
+            rewrite_tasks.append(
+                self.user_simulator.rewrite(
+                    chat_history=[],
+                    task_desc=env_extra.get("task_desc", ""),
+                    single_turn_prompt=message[-1]["content"],
+                    formatting_cfg=self.user_simulator_formatting_cfg,
+                )
+            )
+
+        rewritten_results = await asyncio.gather(*rewrite_tasks)
+        if debug:
+            for original_message, rewritten in zip(messages, rewritten_results):
+                logger.info(f"Original message: {original_message}")
+                logger.info(f"Rewritten message: {rewritten}")
+
+        rewritten_messages: List[ConversationType] = []
+        for original_message, rewritten in zip(messages, rewritten_results):
+            rewritten_messages.append(self._replace_user_message(original_message, rewritten))
+        return rewritten_messages
+    
     async def agent_loop(
         self,
         prompt: ConversationType,
@@ -452,6 +530,9 @@ class SkyRLGymGenerator(GeneratorInterface):
         )
         max_tokens = self.generator_cfg.sampling_params.max_generate_length
         max_input_length = self.generator_cfg.max_input_length
+
+        if self.user_simulator is not None:
+            prompts = await self._rewrite_prompts(prompts, env_extras, debug=True)
 
         if self.batched:
             return await self.generate_batched(

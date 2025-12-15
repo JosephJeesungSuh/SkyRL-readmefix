@@ -10,8 +10,8 @@ set -x
 
 # You can override the default values with e.g.: `NUM_GPUS=1 bash examples/gsm8k/run_gsm8k.sh`.
 
-: "${DATA_DIR:="$HOME/data/gsm8k"}"
-: "${NUM_GPUS:=4}"
+: "${DATA_DIR:="$HOME/data/collabllm"}"
+: "${NUM_GPUS:=1}"
 : "${LOGGER:=wandb}" # change to "console" to print to stdout
 
 : "${INFERENCE_BACKEND:=vllm}"
@@ -32,17 +32,17 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   generator.num_inference_engines=$NUM_GPUS \
   generator.inference_engine_tensor_parallel_size=1 \
   trainer.epochs=20 \
-  trainer.eval_batch_size=1024 \
+  trainer.eval_batch_size=1 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
   trainer.update_epochs_per_batch=1 \
-  trainer.train_batch_size=1024 \
-  trainer.policy_mini_batch_size=256 \
-  trainer.micro_forward_batch_size_per_gpu=64 \
-  trainer.micro_train_batch_size_per_gpu=64 \
+  trainer.train_batch_size=1 \
+  trainer.policy_mini_batch_size=1 \
+  trainer.micro_forward_batch_size_per_gpu=1 \
+  trainer.micro_train_batch_size_per_gpu=1 \
   trainer.ckpt_interval=10 \
-  trainer.max_prompt_length=512 \
-  generator.sampling_params.max_generate_length=1024 \
+  trainer.max_prompt_length=2048 \
+  generator.sampling_params.max_generate_length=4096 \
   trainer.policy.optimizer_config.lr=1.0e-6 \
   trainer.algorithm.use_kl_loss=true \
   generator.backend=$INFERENCE_BACKEND \
@@ -54,9 +54,10 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   generator.n_samples_per_prompt=5 \
   generator.gpu_memory_utilization=0.8 \
   trainer.logger="$LOGGER" \
-  trainer.project_name="gsm8k" \
-  trainer.run_name="gsm8k_test" \
+  trainer.project_name="collabllm-test" \
+  trainer.run_name="collabllm_test" \
   trainer.resume_mode=null \
-  trainer.ckpt_path="$HOME/ckpts/gsm8k_qwen2p5_1p5B_ckpt" \
-  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts.jsonl" \
+  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_1p5B_ckpt" \
+  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm.jsonl" \
+  generator.user_simulator.enabled=true \
   $@

@@ -93,6 +93,7 @@ class CollabLLMLLMJudgeEnv(BaseTextEnv):
                     logger.info(f"LLM judge response: {response}")
                 parsed_dict = extract_outer_dict(response)
                 score = parsed_dict.get("score")
+                return float(score)
             except Exception:
                 if response is None:
                     logger.exception("Attempt %d/%d: LLM judge failed.", attempt, self._max_retries)
@@ -104,7 +105,8 @@ class CollabLLMLLMJudgeEnv(BaseTextEnv):
                     logger.error("LLM judge failed after %d attempts. Returning reward 0.0.", self._max_retries)
                     return 0.0
         
-        return float(score)
+        logger.error("LLM judge did not return a valid score. Returning reward 0.0.")
+        return 0.0
 
     def step(self, action: str) -> BaseTextEnvStepOutput:
         done = True

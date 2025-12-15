@@ -29,8 +29,6 @@ from skyrl_train.generators.utils import (
 )
 
 from skyrl_train.generators.user_simulator import UserSimulator
-from skyrl_train.generators.user_simulator_prompt import DATASETS_INFO
-from skyrl_train.generators.user_simulator_custom_utils import robust_json_loads
 
 
 @dataclass
@@ -144,17 +142,6 @@ class SkyRLGymGenerator(GeneratorInterface):
             "Messages to replace must be non-empty and the "
             "last message in the prompt must be from the user."
         )
-
-        try:
-            parsed = robust_json_loads(rewritten)
-            if isinstance(parsed, dict):
-                rewritten = parsed.get("response", rewritten)
-        except Exception:
-            # Fall back to using the raw response from the simulator
-            logger.warning("Failed to parse rewritten prompt JSON. Using raw response.")
-            logger.warning(f"Rewritten content: {rewritten}")
-            pass
-
         rewritten_message[-1]["content"] = rewritten
         return rewritten_message
 
@@ -169,13 +156,13 @@ class SkyRLGymGenerator(GeneratorInterface):
         """
         assert self.user_simulator is not None, "User simulator not initialized but _rewrite_prompts called."
 
-        rewrite_tasks = []
+        _rewrite_tasks = []
         for message, env_extra in zip(messages, env_extras):
             assert len(message) > 0 and message[-1]["role"] == "user", (
                 "Messages to rewrite must be non-empty and the "
                 "last message in the prompt must be from the user."
             )
-            rewrite_tasks.append(
+            _rewrite_tasks.append(
                 self.user_simulator.rewrite(
                     chat_history=[],
                     task_desc=env_extra.get("task_desc", ""),
@@ -184,7 +171,7 @@ class SkyRLGymGenerator(GeneratorInterface):
                 )
             )
 
-        rewritten_results = await asyncio.gather(*rewrite_tasks)
+        rewritten_results = await asyncio.gather(*_rewrite_tasks)
         if debug:
             for original_message, rewritten in zip(messages, rewritten_results):
                 logger.info(f"Original message: {original_message}")
@@ -532,7 +519,7 @@ class SkyRLGymGenerator(GeneratorInterface):
         max_input_length = self.generator_cfg.max_input_length
 
         if self.user_simulator is not None:
-            prompts = await self._rewrite_prompts(prompts, env_extras, debug=True)
+            prompts = await self._rewrite_prompts(prompts, env_extras)
 
         if self.batched:
             return await self.generate_batched(

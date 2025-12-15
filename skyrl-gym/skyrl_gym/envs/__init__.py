@@ -38,6 +38,6 @@ register(
 )
 
 register(
-    id="lost_in_conversation",
-    entry_point="skyrl_gym.envs.lost_in_conversation.env:LostInConversationEnv",
+    id="collabllm_math_500",
+    entry_point="skyrl_gym.envs.collabllm.env:CollabLLMLLMJudgeEnv",
 )

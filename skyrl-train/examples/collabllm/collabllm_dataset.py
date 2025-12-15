@@ -6,7 +6,7 @@ from typing import Dict, Any
 from datasets import load_dataset
 
 DATA_SOURCE="huggingfaceh4--math-500"
-ENV_CLASS="gsm8k"
+ENV_CLASS="collabllm_math_500" # ENV_CLASS="gsm8k"
 DATASET_NAME = "HuggingFaceH4/MATH-500"
 SEED = 42
 TRAIN_RATIO = 0.85
@@ -24,7 +24,8 @@ def reformat_example(
         "env_class": env_class,
         "reward_spec": {
             "method": "rule",
-            "ground_truth": 0,
+            "ground_truth": ex.get("answer"),
+            "initial_question": ex.get("problem"),
         },
         "extra_info": {
             "task_desc": "question answering",

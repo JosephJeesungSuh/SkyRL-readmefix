@@ -18,6 +18,7 @@ set -x
 # : "${INFERENCE_BACKEND:=sglang}"
 
 ## always make sure no space after the backslash `\` at the end of the line
+# environment.env_class=gsm8k \
 
 uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_base \
   data.train_data="['$DATA_DIR/train.parquet']" \
@@ -50,7 +51,11 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   generator.weight_sync_backend=nccl \
   generator.async_engine=true \
   generator.batched=true \
-  environment.env_class=gsm8k \
+  environment.env_class=collabllm_math_500 \
+  environment.skyrl_gym.collabllm_math_500.llm_judge.enabled=true \
+  environment.skyrl_gym.collabllm_math_500.llm_judge.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \
+  environment.skyrl_gym.collabllm_math_500.llm_judge.is_local=true \
+  environment.skyrl_gym.collabllm_math_500.llm_judge.local_port=8002 \
   generator.n_samples_per_prompt=5 \
   generator.gpu_memory_utilization=0.8 \
   trainer.logger="$LOGGER" \

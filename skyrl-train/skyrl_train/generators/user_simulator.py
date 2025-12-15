@@ -12,6 +12,7 @@ from omegaconf import DictConfig
 from openai import AsyncOpenAI
 
 from skyrl_train.inference_engines.base import ConversationType
+from .user_simulator_custom_utils import extract_outer_dict
 from .user_simulator_prompt import USER_SIM_SYSPROMPT
 
 
@@ -62,7 +63,7 @@ class UserSimulator:
                       single_turn_prompt: str,
                       formatting_cfg: Dict,
                       debug: bool = False,
-                      **kwargs) -> ConversationType:
+                      **kwargs) -> Optional[str]:
 
         messages = [
             {"role": "user", "content": self._system_prompt.format(
@@ -76,7 +77,7 @@ class UserSimulator:
             )}
         ]
 
-        if debug:
+        if debug: # print messages sent to user simulator
             logger.info(f"messages to user simulator: {messages}")
             if 'model_name' in kwargs:
                 from transformers import AutoProcessor
@@ -88,22 +89,26 @@ class UserSimulator:
 
         for attempt in range(1, self._max_retries + 1):
             try:
+                rewritten_content: Optional[str] = None
                 completion = await self._client.chat.completions.create(
                     model=self._model, messages=messages, temperature=self._temperature
                 )
-                break
+                rewritten_content = completion.choices[0].message.content
+                if debug:
+                    logger.info(f"rewritten prompt from user simulator: {rewritten_content}")
+                parsed_dict = extract_outer_dict(rewritten_content)
+                return parsed_dict["response"]
             except Exception:
-                logger.exception("Prompt rewriting failed on attempt %d/%d.", attempt, self._max_retries)
+                if rewritten_content is None:
+                    logger.exception("Attempt %d/%d: rewriting failed.", attempt, self._max_retries)
+                else:
+                    logger.exception("Attempt %d/%d: extracting from rewriting failed.", attempt, self._max_retries)
                 if attempt < self._max_retries:
                     await asyncio.sleep(2 ** (attempt - 1))
                 else:
                     logger.error("All prompt rewriting attempts failed.")
                     return None
-
-        rewritten_content: Optional[str] = completion.choices[0].message.content
-        if not rewritten_content:
-            logger.warning("Prompt rewriter returned empty content; using original prompt.")
-        return rewritten_content
+        return None
 
     def rewrite_sync(self, **kwargs) -> ConversationType:
         """

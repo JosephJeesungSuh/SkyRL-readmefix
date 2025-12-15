@@ -14,3 +14,12 @@ search:
   search_url: "http://127.0.0.1:8000/retrieve"
   topk: 3
   timeout: 30
+
+collabllm_math_500:
+  llm_judge:
+    enabled: false
+    model_name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
+    base_url: "http://localhost:{port}/v1"
+    is_local: true
+    local_port: 8002
+    temperature: 0.0

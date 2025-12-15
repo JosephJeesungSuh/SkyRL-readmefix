@@ -345,9 +345,7 @@ def skyrl_entrypoint(cfg: DictConfig):
 
 @hydra.main(config_path=config_dir, config_name="ppo_base_config", version_base=None)
 def main(cfg: DictConfig) -> None:
-    # validate the arguments
     validate_cfg(cfg)
-
     initialize_ray(cfg)
     ray.get(skyrl_entrypoint.remote(cfg))
 

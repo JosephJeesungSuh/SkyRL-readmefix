@@ -1,49 +1,59 @@
-#!/usr/bin/env bash
 set -x
 
-# Example colocated GRPO training on the Lost in Conversation sharded instructions.
-# Requires OPENAI_API_KEY (or Azure OpenAI variables) because the environment delegates
-# system/user turns to the upstream simulators.
+# Colocated GRPO training+generation for Qwen2.5-1.5B-Instruct on GSM8K.
 
-DATASET_PATH=${DATASET_PATH:-$(dirname "$0")/lost_in_conversation.jsonl}
+# uv run examples/gsm8k/gsm8k_dataset.py --output_dir $HOME/data/gsm8k
+# export WANDB_API_KEY=<your_key_here>
+# bash examples/gsm8k/run_gsm8k.sh
 
-uv run --isolated --extra vllm -m skyrl_train.entrypoints.main_base \
-  data.train_data="['${DATASET_PATH}']" \
-  data.val_data="['${DATASET_PATH}']" \
+# NOTE (sumanthrh): `micro_train_batch_size_per_gpu` and `micro_forward_batch_size_per_gpu` can be tuned
+
+# You can override the default values with e.g.: `NUM_GPUS=1 bash examples/gsm8k/run_gsm8k.sh`.
+
+: "${DATA_DIR:="$HOME/data/collabllm"}"
+: "${NUM_GPUS:=1}"
+: "${LOGGER:=wandb}"
+
+: "${INFERENCE_BACKEND:=vllm}"
+
+uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_base \
+  data.train_data="['$DATA_DIR/train.parquet']" \
+  data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
-  trainer.policy.model.path="Qwen/Qwen2.5-0.5B-Instruct" \
+  trainer.policy.model.path="Qwen/Qwen2.5-1.5B-Instruct" \
   trainer.placement.colocate_all=true \
   trainer.strategy=fsdp2 \
-  trainer.placement.policy_num_gpus_per_node=1 \
-  trainer.placement.ref_num_gpus_per_node=1 \
-  trainer.policy.optimizer_config.lr=1.0e-6 \
-  trainer.policy.optimizer_config.max_grad_norm=0.5 \
-  trainer.train_batch_size=16 \
-  trainer.policy_mini_batch_size=8 \
-  trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.micro_train_batch_size_per_gpu=1 \
+  trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
+  trainer.placement.critic_num_gpus_per_node=$NUM_GPUS \
+  trainer.placement.ref_num_gpus_per_node=$NUM_GPUS \
+  generator.num_inference_engines=$NUM_GPUS \
+  generator.inference_engine_tensor_parallel_size=1 \
+  trainer.epochs=20 \
+  trainer.eval_batch_size=32 \
+  trainer.eval_before_train=true \
+  trainer.eval_interval=5 \
   trainer.update_epochs_per_batch=1 \
-  trainer.epochs=1 \
-  trainer.max_prompt_length=2048 \
-  generator.max_input_length=4096 \
-  generator.sampling_params.max_generate_length=512 \
-  generator.sampling_params.temperature=1.0 \
-  generator.sampling_params.stop='[]' \
-  generator.backend=vllm \
+  trainer.train_batch_size=32 \
+  trainer.policy_mini_batch_size=8 \
+  trainer.micro_forward_batch_size_per_gpu=4 \
+  trainer.micro_train_batch_size_per_gpu=4 \
+  trainer.ckpt_interval=10 \
+  trainer.max_prompt_length=512 \
+  generator.sampling_params.max_generate_length=1024 \
+  trainer.policy.optimizer_config.lr=1.0e-6 \
+  trainer.algorithm.use_kl_loss=true \
+  generator.backend=$INFERENCE_BACKEND \
   generator.run_engines_locally=true \
-  generator.batched=false \
-  generator.use_conversation_multi_turn=true \
-  generator.max_turns=6 \
-  generator.n_samples_per_prompt=1 \
-  environment.env_class="lost_in_conversation" \
-  environment.skyrl_gym.max_env_workers=4 \
-  environment.skyrl_gym.lost_in_conversation.dataset_path="lost_in_conversation/data/sharded_instructions_600.json" \
-  environment.skyrl_gym.lost_in_conversation.assistant_model="gpt-4o-mini" \
-  environment.skyrl_gym.lost_in_conversation.system_model="gpt-4o-mini" \
-  environment.skyrl_gym.lost_in_conversation.user_model="gpt-4o-mini" \
-  environment.skyrl_gym.lost_in_conversation.assistant_temperature=1.0 \
-  environment.skyrl_gym.lost_in_conversation.user_temperature=1.0 \
-  trainer.logger="wandb" \
-  trainer.project_name="skyrl-lost-in-conversation" \
-  trainer.run_name="lic-grpo" \
-  "$@"
+  generator.weight_sync_backend=nccl \
+  generator.async_engine=true \
+  generator.batched=true \
+  environment.env_class=collabllm \
+  generator.n_samples_per_prompt=5 \
+  generator.gpu_memory_utilization=0.8 \
+  trainer.logger="$LOGGER" \
+  trainer.project_name="collabllm" \
+  trainer.run_name="collabllm_test" \
+  trainer.resume_mode=null \
+  trainer.ckpt_path="$HOME/ckpts/collabllm_ckpt" \
+  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm.jsonl" \
+  $@

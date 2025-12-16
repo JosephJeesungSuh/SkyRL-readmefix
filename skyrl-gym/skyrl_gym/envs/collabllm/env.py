@@ -1,5 +1,6 @@
 import copy
 import time
+import httpx
 from typing import Any, Dict, Optional, List
 
 from omegaconf import DictConfig
@@ -12,12 +13,12 @@ from skyrl_gym.envs.base_text_env import (
     ConversationType,
 )
 from skyrl_gym.envs.collabllm.llm_as_a_judge_prompt import JUDGE_PROMPT
-from skyrl_gym.envs.collabllm.llm_as_a_judge_utils import extract_outer_dict
+from skyrl_train.generators.user_simulator_custom_utils import extract_outer_dict
 from skyrl_train.generators.user_simulator_prompt import USER_SIM_SYSPROMPT
 from skyrl_train.generators.user_simulator import usersim_stringfy
 
 
-def _format_conversation(conversation):
+def _format_hist_conversation(conversation):
     """
     Format the historical conversation into a string for LLM judge prompt.
     """
@@ -61,7 +62,10 @@ class CollabLLMLLMJudgeEnv(BaseTextEnv):
         assert env_config.llm_judge.enabled, "llm_judge must be enabled in env_config"
         if env_config.llm_judge.is_local:
             base_url = env_config.llm_judge.base_url.format(port=env_config.llm_judge.local_port)
-            self._judge_client = OpenAI(base_url=base_url)
+            self._judge_client = OpenAI(
+                base_url=base_url,
+                timeout=httpx.Timeout(timeout=1800.0, connect=10.0, read=1800.0, write=1800.0, pool=60.0),
+            )
             self._judge_model = env_config.llm_judge.model_name
             self._judge_temp = env_config.llm_judge.temperature
         else:
@@ -80,7 +84,7 @@ class CollabLLMLLMJudgeEnv(BaseTextEnv):
         debug: bool = False,
     ) -> float:
         conv = conversation if conversation is not None else self._conversation
-        conversation_text = _format_conversation(conv)
+        conversation_text = _format_hist_conversation(conv)
         message = JUDGE_PROMPT.format(
             question=self._original_query,
             chat_history=conversation_text,
@@ -106,13 +110,13 @@ class CollabLLMLLMJudgeEnv(BaseTextEnv):
                 return float(score)
             except Exception:
                 if response is None:
-                    logger.exception("Attempt %d/%d: LLM judge failed.", attempt, self._judge_max_retries)
+                    logger.exception(f"Attempt {attempt}/{self._judge_max_retries}: LLM judge failed.")
                 else:
-                    logger.exception("Attempt %d/%d: extracting from LLM judge response failed.", attempt, self._judge_max_retries)
+                    logger.exception(f"Attempt {attempt}/{self._judge_max_retries}: extracting from LLM judge response failed.")
                 if attempt < self._judge_max_retries:
                     time.sleep(2 ** (attempt - 1))
                 else:
-                    logger.error("LLM judge failed after %d attempts. Returning reward 0.0.", self._judge_max_retries)
+                    logger.error(f"LLM judge failed after {self._judge_max_retries} attempts. Returning reward 0.0.")
                     return 0.0
         
         logger.error("LLM judge did not return a valid score. Returning reward 0.0.")
@@ -206,6 +210,7 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
                 )
                 response_text = completion.choices[0].message.content.strip()
                 if debug:
+                    logger.info(f"user simulator input: {system_prompt}")
                     logger.info(f"user simulator raw response: {response_text}")
                 parsed = extract_outer_dict(response_text)
                 return parsed["response"]
@@ -227,11 +232,11 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
 
         return self._user_terminal_signal
 
-    def step(self, action: str, debug: bool = True) -> BaseTextEnvStepOutput:
+    def step(self, action: str, debug: bool = False) -> BaseTextEnvStepOutput:
         assert self._conversation is not None, "Environment not initialized with a prompt."
         if debug:
+            logger.info(f"Conversation so far at turn {self.turns + 1}: {self._conversation}")
             logger.info(f"Assistant action at turn {self.turns + 1}: {action}")
-            logger.info(f"Conversation so far: {self._conversation}")
 
         self._conversation.append({"role": "assistant", "content": action})
         self.turns += 1
@@ -249,10 +254,12 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
                 observations = [user_message]
 
         if done:
-            # NOTE: conversation_for_reward should end with assistant action
             # done when max_turn reached (even if no terminal_signal) or terminal_signal received
-            conversation_for_reward: List[Dict[str, str]] = copy.deepcopy(self._conversation)
-            reward = self._get_reward(action, conversation=conversation_for_reward, debug=debug)
+            # NOTE: _hist_conv should end with user action
+            # because the assistant action is provided as `action` argument
+            _hist_conv = copy.deepcopy(self._conversation)
+            _hist_conv = _hist_conv[:-1]  # remove last assistant action
+            reward = self._get_reward(action, conversation=_hist_conv, debug=debug)
 
         return BaseTextEnvStepOutput(
             observations=observations,

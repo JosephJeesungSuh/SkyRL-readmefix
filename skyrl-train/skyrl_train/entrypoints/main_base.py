@@ -322,6 +322,8 @@ def skyrl_entrypoint(cfg: DictConfig):
     if cfg.generator.user_simulator.enabled:
         # check the connection before start
         from skyrl_train.generators.user_simulator import UserSimulator
+        # TODO : move the user_simulator config from hydra cfg to skyrl_gym_config/default.yaml
+        # for unified config management
         user_simulator = UserSimulator.from_config(cfg.generator.user_simulator)
         test_output = (
             user_simulator.rewrite_sync(

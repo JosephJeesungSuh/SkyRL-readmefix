@@ -11,7 +11,7 @@ set -x
 # You can override the default values with e.g.: `NUM_GPUS=1 bash examples/gsm8k/run_gsm8k.sh`.
 
 : "${DATA_DIR:="$HOME/data/collabllm"}"
-: "${NUM_GPUS:=1}"
+: "${NUM_GPUS:=2}"
 : "${LOGGER:=wandb}" # change to "console" to print to stdout
 
 : "${INFERENCE_BACKEND:=vllm}"
@@ -24,9 +24,9 @@ set -x
 
 uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_base \
   data.train_data="['$DATA_DIR/train.parquet']" \
-  data.val_data="['$DATA_DIR/validation_subset.parquet']" \
+  data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
-  trainer.policy.model.path="Qwen/Qwen2.5-1.5B-Instruct" \
+  trainer.policy.model.path="Qwen/Qwen2.5-7B-Instruct" \
   trainer.placement.colocate_all=true \
   trainer.strategy=fsdp2 \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
@@ -34,15 +34,15 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.placement.ref_num_gpus_per_node=$NUM_GPUS \
   generator.num_inference_engines=$NUM_GPUS \
   generator.inference_engine_tensor_parallel_size=1 \
-  trainer.epochs=20 \
-  trainer.eval_batch_size=1 \
+  trainer.epochs=50 \
+  trainer.eval_batch_size=32 \
   trainer.eval_before_train=true \
-  trainer.eval_interval=5 \
+  trainer.eval_interval=10 \
   trainer.update_epochs_per_batch=1 \
-  trainer.train_batch_size=1 \
-  trainer.policy_mini_batch_size=1 \
-  trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.micro_train_batch_size_per_gpu=1 \
+  trainer.train_batch_size=32 \
+  trainer.policy_mini_batch_size=16 \
+  trainer.micro_forward_batch_size_per_gpu=8 \
+  trainer.micro_train_batch_size_per_gpu=2 \
   trainer.ckpt_interval=10 \
   trainer.max_prompt_length=2048 \
   generator.sampling_params.max_generate_length=4096 \
@@ -57,14 +57,14 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   generator.max_turns=$MAX_TURNS \
   generator.max_input_length=8192 \
   environment.env_class=collabllm_math_500_multiturn \
-  environment.skyrl_gym.collabllm_math_500.llm_judge.enabled=true \
-  environment.skyrl_gym.collabllm_math_500.llm_judge.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \
-  environment.skyrl_gym.collabllm_math_500.llm_judge.is_local=true \
-  environment.skyrl_gym.collabllm_math_500.llm_judge.local_port=8002 \
-  environment.skyrl_gym.collabllm_math_500.user_simulator.enabled=true \
-  environment.skyrl_gym.collabllm_math_500.user_simulator.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \
-  environment.skyrl_gym.collabllm_math_500.user_simulator.is_local=true \
-  environment.skyrl_gym.collabllm_math_500.user_simulator.local_port=8002 \
+  environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.enabled=true \
+  environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \
+  environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.is_local=true \
+  environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.local_port=8002 \
+  environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.enabled=true \
+  environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \
+  environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.is_local=true \
+  environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.local_port=8002 \
   generator.user_simulator.enabled=true \
   generator.n_samples_per_prompt=5 \
   generator.gpu_memory_utilization=0.8 \
@@ -72,6 +72,6 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.project_name="collabllm-test" \
   trainer.run_name="collabllm_test_multiturn" \
   trainer.resume_mode=null \
-  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_1p5B_ckpt" \
+  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_7B_ckpt" \
   generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm_multiturn.jsonl" \
   $@

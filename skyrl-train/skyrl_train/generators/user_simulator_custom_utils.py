@@ -1,4 +1,5 @@
 import ast
+import json
 from typing import Optional, Tuple
 
 def _outer_braces_span(s: str) -> Optional[Tuple[int, int]]:
@@ -61,8 +62,14 @@ def extract_outer_dict(s: str) -> dict:
     obj_str = _keep_only_outer_object(s, inner=False)
     try:
         parsed_dict = ast.literal_eval(obj_str)
-    except Exception as e:
-        raise ValueError(f"Failed to parse extracted object as dict: {e}")
+    except Exception as e_1:
+        try:
+            parsed_dict = json.loads(obj_str, strict=False)
+        except json.JSONDecodeError as e_2:
+            raise ValueError(
+                f"Failed to parse extracted object as Python literal: {e_1}\n"
+                f"Failed to parse extracted object as JSON: {e_2}"
+            )
     if not isinstance(parsed_dict, dict):
         raise ValueError(f"Extracted object is not a dict but of type {type(parsed_dict)}")
     return parsed_dict

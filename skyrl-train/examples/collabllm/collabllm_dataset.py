@@ -6,7 +6,7 @@ from typing import Dict, Any
 from datasets import load_dataset
 
 DATA_SOURCE="huggingfaceh4--math-500"
-ENV_CLASS="collabllm_math_500" # ENV_CLASS="gsm8k"
+ENV_CLASS="collabllm_math_500_multiturn" # ENV_CLASS="gsm8k"
 DATASET_NAME = "HuggingFaceH4/MATH-500"
 SEED = 42
 TRAIN_RATIO = 0.85

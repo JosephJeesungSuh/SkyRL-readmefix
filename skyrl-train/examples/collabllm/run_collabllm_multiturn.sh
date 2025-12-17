@@ -26,7 +26,7 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
-  trainer.policy.model.path="Qwen/Qwen2.5-7B-Instruct" \
+  trainer.policy.model.path="Qwen/Qwen2.5-3B-Instruct" \
   trainer.placement.colocate_all=true \
   trainer.strategy=fsdp2 \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
@@ -41,8 +41,8 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.update_epochs_per_batch=1 \
   trainer.train_batch_size=32 \
   trainer.policy_mini_batch_size=16 \
-  trainer.micro_forward_batch_size_per_gpu=8 \
-  trainer.micro_train_batch_size_per_gpu=2 \
+  trainer.micro_forward_batch_size_per_gpu=4 \
+  trainer.micro_train_batch_size_per_gpu=1 \
   trainer.ckpt_interval=10 \
   trainer.max_prompt_length=2048 \
   generator.sampling_params.max_generate_length=4096 \
@@ -72,6 +72,6 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.project_name="collabllm-test" \
   trainer.run_name="collabllm_test_multiturn" \
   trainer.resume_mode=null \
-  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_7B_ckpt" \
-  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm_multiturn.jsonl" \
+  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_3B_ckpt" \
+  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm_multiturn_qwen2p5_3b.jsonl" \
   $@

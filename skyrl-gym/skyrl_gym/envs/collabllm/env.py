@@ -13,9 +13,12 @@ from skyrl_gym.envs.base_text_env import (
     ConversationType,
 )
 from skyrl_gym.envs.collabllm.llm_as_a_judge_prompt import JUDGE_PROMPT
+from skyrl_train.generators.user_simulator_prompt import USER_SIM_SYSPROMPT, USER_SIM_SYSPROMPT_ANGRY
 from skyrl_train.generators.user_simulator_custom_utils import extract_outer_dict
-from skyrl_train.generators.user_simulator_prompt import USER_SIM_SYSPROMPT
 from skyrl_train.generators.user_simulator import usersim_stringfy
+
+logger.disable("httpx")
+logger.disable("httpcore")
 
 
 def _format_hist_conversation(conversation):
@@ -246,7 +249,7 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
 
         if not done: # has not reached max_turns
             user_reply = self._simulate_user_action(debug=debug)
-            if user_reply.strip() == self._user_terminal_signal:
+            if self._user_terminal_signal in user_reply.strip():
                 done = True
             else:
                 user_message = {"role": "user", "content": user_reply}

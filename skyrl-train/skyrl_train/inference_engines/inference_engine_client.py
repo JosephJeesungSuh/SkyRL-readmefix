@@ -215,6 +215,7 @@ class InferenceEngineClient(InferenceEngineInterface):
             # 3.2. Send the request.
             logger.debug(f"generate() request sent (including potential retries): {engine_input}")
             partial_response: InferenceEngineOutput = await self.engines[engine_idx].generate(engine_input)
+            logger.debug(f"generate() partial response received: {partial_response}")
 
             # 3.3. Parse the partial response.
             assert len(partial_response["response_ids"]) == 1, "Expected exactly one response."

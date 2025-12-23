@@ -215,8 +215,11 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
                 if debug:
                     logger.info(f"user simulator input: {system_prompt}")
                     logger.info(f"user simulator raw response: {response_text}")
-                parsed = extract_outer_dict(response_text)
-                return parsed["response"]
+                _parsed = extract_outer_dict(response_text)
+                _response = _parsed.get("response")
+                if not isinstance(_response, str):
+                    raise ValueError(f"Expected 'response' to be a string, got {type(_response)}")
+                return _response
             except Exception:
                 if response_text is None:
                     logger.exception(

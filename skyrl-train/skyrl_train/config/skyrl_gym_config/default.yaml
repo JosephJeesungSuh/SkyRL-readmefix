@@ -43,3 +43,4 @@ collabllm_math_500_multiturn:
       user_template: "User: "
       ai_template: "AI: "
       terminal_signal: "<END_OF_CONVERSATION>"
+    tone: "default"

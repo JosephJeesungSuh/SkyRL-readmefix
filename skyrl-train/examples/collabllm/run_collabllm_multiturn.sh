@@ -26,7 +26,7 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
-  trainer.policy.model.path="Qwen/Qwen2.5-0.5B-Instruct" \
+  trainer.policy.model.path="Qwen/Qwen2.5-1.5B-Instruct" \
   trainer.placement.colocate_all=true \
   trainer.strategy=fsdp2 \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
@@ -46,10 +46,10 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.policy.optimizer_config.lr=1.0e-6 \
   trainer.algorithm.use_kl_loss=true \
   trainer.logger="$LOGGER" \
-  trainer.project_name="collabllm-test" \
+  trainer.project_name="collabllm-test--qwen2p5-1p5b" \
   trainer.run_name="collabllm_test_multiturn" \
   trainer.resume_mode=latest \
-  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_0.5B_ckpt" \
+  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_1.5B_ckpt" \
   generator.sampling_params.max_generate_length=4096 \
   generator.num_inference_engines=$NUM_GPUS \
   generator.inference_engine_tensor_parallel_size=1 \
@@ -64,7 +64,7 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   generator.use_conversation_multi_turn=true \
   generator.max_turns=$MAX_TURNS \
   generator.max_input_length=8192 \
-  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm_multiturn_qwen2p5_0p5b.jsonl" \
+  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm_multiturn_qwen2p5_1p5b.jsonl" \
   environment.env_class=collabllm_math_500_multiturn \
   environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.enabled=true \
   environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \

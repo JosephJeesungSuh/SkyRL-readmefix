@@ -13,7 +13,7 @@ from openai import AsyncOpenAI
 
 from skyrl_train.inference_engines.base import ConversationType
 from .user_simulator_custom_utils import extract_outer_dict
-from .user_simulator_prompt import USER_SIM_SYSPROMPT
+from .user_simulator_prompt import USER_SIM_SYSPROMPT, USER_SIM_SYSPROMPT_ANGRY
 
 
 def usersim_stringfy(
@@ -52,10 +52,16 @@ class UserSimulator:
         else:
             raise NotImplementedError("Only local vllm model is supported for UserSimulator.")
         # note that system_prompt has {} formatting with task_desc, single_turn_prompt, chat_history, terminal_signal
+        if cfg.get("tone") == "default":
+            _sysprompt = USER_SIM_SYSPROMPT
+        elif cfg.get("tone") == "angry":
+            _sysprompt = USER_SIM_SYSPROMPT_ANGRY
+        else:
+            raise ValueError(f"Unsupported tone {cfg.get('tone')} for UserSimulator.")
         return cls(
             client=client,
             model_name=cfg.model_name,
-            system_prompt=USER_SIM_SYSPROMPT,
+            system_prompt=_sysprompt,
             temperature=cfg.temperature,
         )
 

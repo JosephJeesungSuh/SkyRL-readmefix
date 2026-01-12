@@ -54,7 +54,6 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   generator.num_inference_engines=$NUM_GPUS \
   generator.inference_engine_tensor_parallel_size=1 \
   generator.backend=$INFERENCE_BACKEND \
-  generator.user_simulator.enabled=true \
   generator.n_samples_per_prompt=5 \
   generator.gpu_memory_utilization=0.8 \
   generator.run_engines_locally=true \

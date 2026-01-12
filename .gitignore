@@ -1,3 +1,6 @@
+# custom
+.claude/
+
 __pycache__/
 /wandb/
 /skyrl-train/wandb/

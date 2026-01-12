@@ -38,7 +38,6 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_gen
   generator.use_conversation_multi_turn=true \
   generator.max_turns=$MAX_TURNS \
   generator.max_input_length=8192 \
-  generator.user_simulator.enabled=true \
   generator.eval_n_samples_per_prompt=1 \
   trainer.project_name="collabllm-eval" \
   trainer.run_name="collabllm_eval_multiturn_global_${GLOBAL_STEP}" \

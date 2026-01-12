@@ -64,5 +64,4 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.resume_mode=null \
   trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_1p5B_ckpt" \
   generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm.jsonl" \
-  generator.user_simulator.enabled=true \
   $@

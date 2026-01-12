@@ -12,7 +12,7 @@ BASE_SCRIPT="${SCRIPT_DIR}/eval_collabllm_multiturn.sh"
 # export INFERENCE_BACKEND="vllm"
 # export MAX_TURNS=4
 
-for step in $(seq 10 10 650); do
+for step in $(seq 120 10 650); do
   export GLOBAL_STEP="$step"
   echo "===== Running GLOBAL_STEP=${GLOBAL_STEP} ====="
   GLOBAL_STEP=$GLOBAL_STEP bash $BASE_SCRIPT

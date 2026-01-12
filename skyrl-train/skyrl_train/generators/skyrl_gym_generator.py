@@ -73,13 +73,10 @@ class SkyRLGymGenerator(GeneratorInterface):
         self.generation_prompt_ids = get_generation_prompt_ids(tokenizer) if self.use_conversation_multi_turn else None
 
         ### custom : user simulator
+        # Note: User simulator is configured per environment in skyrl_gym_cfg
+        # and will be instantiated on-demand when needed for prompt rewriting
         self.user_simulator = None
         self.user_simulator_formatting_cfg = None
-        if generator_cfg.user_simulator.enabled:
-            self.user_simulator = UserSimulator.from_config(generator_cfg.user_simulator)
-            self.user_simulator_formatting_cfg = (
-                generator_cfg.user_simulator.formatting
-            ) # includes: user_template, ai_template, terminal_signal
 
         if self.skyrl_gym_cfg.max_env_workers > 0:
             self.env_executor = ThreadPoolExecutor(
@@ -148,13 +145,35 @@ class SkyRLGymGenerator(GeneratorInterface):
     async def _rewrite_prompts(
             self,
             messages: List[ConversationType],
+            env_classes: List[str],
             env_extras: List[Dict[str, Any]],
             debug: bool = False,
         ) -> List[ConversationType]:
         """
-        Called at the beginning of multi-turn conversation generation to rewrite the initial prompts
+        Called at the beginning of multi-turn conversation generation to rewrite the initial prompts.
+        User simulator is instantiated on-demand from the skyrl_gym_cfg based on env_class.
         """
-        assert self.user_simulator is not None, "User simulator not initialized but _rewrite_prompts called."
+        # Instantiate user simulator on-demand from the first env_class
+        # (assuming all env_classes in a batch use the same user_simulator config)
+        # TODO: for mixture of env_classes, need to revisit this logic
+        if self.user_simulator is None and len(env_classes) > 0:
+            env_class = env_classes[0]
+            env_config = self.skyrl_gym_cfg.get(env_class, DictConfig({}))
+            user_simulator_cfg = env_config.get("user_simulator")
+
+            if user_simulator_cfg is not None and user_simulator_cfg.get("enabled", False):
+                self.user_simulator = UserSimulator.from_config(user_simulator_cfg)
+                self.user_simulator_formatting_cfg = user_simulator_cfg.formatting
+            else:
+                logger.error(
+                    f"User simulator not enabled for env_class '{env_class}'. "
+                    "Skipping prompt rewriting."
+                )
+                return messages
+
+        if self.user_simulator is None:
+            logger.error("User simulator not initialized. Skipping prompt rewriting.")
+            return messages
 
         _rewrite_tasks = []
         for message, env_extra in zip(messages, env_extras):
@@ -518,8 +537,13 @@ class SkyRLGymGenerator(GeneratorInterface):
         max_tokens = self.generator_cfg.sampling_params.max_generate_length
         max_input_length = self.generator_cfg.max_input_length
 
-        if self.user_simulator is not None:
-            prompts = await self._rewrite_prompts(prompts, env_extras)
+        # Check if any environment has user_simulator enabled
+        has_user_simulator = any(
+            self.skyrl_gym_cfg.get(env_class, DictConfig({})).get("user_simulator", {}).get("enabled", False)
+            for env_class in env_classes
+        )
+        if has_user_simulator:
+            prompts = await self._rewrite_prompts(prompts, env_classes, env_extras)
 
         if self.batched:
             return await self.generate_batched(

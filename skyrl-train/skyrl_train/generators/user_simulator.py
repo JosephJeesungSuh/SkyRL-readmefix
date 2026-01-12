@@ -57,7 +57,8 @@ class UserSimulator:
         elif cfg.get("tone") == "angry":
             _sysprompt = USER_SIM_SYSPROMPT_ANGRY
         else:
-            raise ValueError(f"Unsupported tone {cfg.get('tone')} for UserSimulator.")
+            raise ValueError(f"Unsupported tone {cfg.get('tone')} for UserSimulator."
+                             f" Current config: {cfg}")
         return cls(
             client=client,
             model_name=cfg.model_name,

@@ -122,6 +122,9 @@ docs = [
 sandboxes = [
     "litellm[proxy]>=1.67.5",
 ]
+tau2bench = [
+    "tau2 @ file:///nas/ucb/jjssuh/projs/tau2-bench",
+]
 vllm = [
     "vllm==0.11.0",
     "flash-attn @ file:///nas/ucb/jjssuh/wheels/flash_attn-2.8.0.post2-cp312-cp312-linux_x86_64.whl",

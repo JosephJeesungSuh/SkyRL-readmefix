@@ -661,6 +661,42 @@ class SkyRLGymGenerator(GeneratorInterface):
                     + "\n"
                 )
 
+    @staticmethod
+    def parse_rollout_to_messages(rollout_text: str, model_name: str) -> Optional[List[Dict[str, str]]]:
+        """
+        Parse a rollout string (prompt or response) into a list of message dictionaries.
+        This function converts the chat template format (e.g., <|im_start|>role...content<|im_end|>)
+        back into a list of dictionaries with 'role' and 'content' keys.
+        Args:
+            rollout_text: The rollout text string containing chat template markers
+        Returns:
+            List of dictionaries with 'role' and 'content' keys
+        Example:
+            >>> text = "<|im_start|>system\\nYou are helpful<|im_end|>\\n<|im_start|>user\\nHello<|im_end|>"
+            >>> messages = SkyRLGymGenerator.parse_rollout_to_messages(text, model_name="Qwen/Qwen2.5-1.5B-Instruct")
+            >>> messages
+            [{'role': 'system', 'content': 'You are helpful'}, {'role': 'user', 'content': 'Hello'}]
+        """
+        messages = []
+        if 'qwen' in model_name.lower() and \
+            ('2p5' in model_name.lower() or '2.5' in model_name.lower()) and \
+            'instruct' in model_name.lower():
+            # Pattern to match <|im_start|>role\ncontent<|im_end|>
+            pattern = r'<\|im_start\|>(\w+)\n(.*?)<\|im_end\|>'
+            try:
+                import re
+                matches = re.findall(pattern, rollout_text, re.DOTALL)
+                for role, content in matches:
+                    messages.append({
+                        'role': role.strip(),
+                        'content': content.strip()
+                    })
+            except Exception:
+                return None
+            return messages
+        else:
+            raise NotImplementedError(f"Rollout parsing not implemented for model {model_name}.")
+
     def _zero_reward_if_not_stop(self, rewards: List[float], stop_reasons: List[str]):
         """Sets the reward to 0 if the stop reason is not "stop".
 

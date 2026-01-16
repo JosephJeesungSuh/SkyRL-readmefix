@@ -106,6 +106,7 @@ class UserSimulator:
                 if debug:
                     logger.info(f"rewritten prompt from user simulator: {rewritten_content}")
                 parsed_dict = extract_outer_dict(rewritten_content)
+                assert isinstance(parsed_dict.get("response"), str), "extracted response not a string"
                 return parsed_dict["response"]
             except Exception:
                 if rewritten_content is None:

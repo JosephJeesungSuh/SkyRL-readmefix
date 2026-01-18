@@ -328,17 +328,21 @@ def skyrl_entrypoint(cfg: DictConfig):
         # check the connection before start
         from skyrl_train.generators.user_simulator import UserSimulator
         user_simulator = UserSimulator.from_config(user_simulator_cfg)
-        test_output = (
-            user_simulator.rewrite_sync(
-                chat_history = [],
-                task_desc = "question answering",
-                single_turn_prompt = "what is the capital of France?",
-                formatting_cfg = user_simulator_cfg.formatting,
-                debug=True, model_name=user_simulator_cfg.model_name
+        try:
+            test_output = (
+                user_simulator.rewrite_sync(
+                    chat_history = [],
+                    task_desc = "question answering",
+                    single_turn_prompt = "what is the capital of France?",
+                    formatting_cfg = user_simulator_cfg.formatting,
+                    debug=True, model_name=user_simulator_cfg.model_name
+                )
             )
-        )
-        logger.info(f"User simulator test output: {test_output}")
-        del user_simulator
+            logger.info(f"User simulator test output: {test_output}")
+        finally:
+            # Properly cleanup the client to avoid connection errors
+            user_simulator.close_sync()
+            del user_simulator
 
     exp = BasePPOExp(cfg)
     exp.run()

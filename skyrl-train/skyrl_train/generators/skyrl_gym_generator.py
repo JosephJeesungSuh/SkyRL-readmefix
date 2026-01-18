@@ -110,6 +110,27 @@ class SkyRLGymGenerator(GeneratorInterface):
             )
             self.base_conversation_token_ids = self.base_conversation_token_ids[: last_eos_token_index + 1]
 
+    def __del__(self):
+        """
+        Destructor to cleanup the user simulator client when the generator is destroyed.
+        This ensures that the AsyncOpenAI client used by the user simulator is properly
+        closed, preventing 'TCPTransport closed' errors during shutdown.
+        """
+        self.cleanup()
+
+    def cleanup(self):
+        """
+        Cleanup resources used by the generator. It's safe to call multiple times.
+        """
+        if self.user_simulator is not None:
+            try:
+                self.user_simulator.close_sync()
+                logger.debug("Generator user simulator client closed successfully")
+            except Exception as e:
+                logger.warning(f"Error while closing generator user simulator client: {e}")
+            finally:
+                self.user_simulator = None
+
     def _validate_cfg(self, generator_cfg: DictConfig):
         if getattr(generator_cfg.sampling_params, "logprobs", None) is not None and not generator_cfg.batched:
             raise ValueError("`sampling_params.logprobs` should be `None` if `batched` is `False`")

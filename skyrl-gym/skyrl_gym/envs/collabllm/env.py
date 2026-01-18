@@ -131,6 +131,19 @@ class CollabLLMLLMJudgeEnv(BaseTextEnv):
         self._conversation.append({"role": "assistant", "content": action})
         return BaseTextEnvStepOutput(observations=[], reward=reward, done=done, metadata={})
 
+    def close(self) -> None:
+        """
+        Close the OpenAI judge client and cleanup resources.
+        The OpenAI client maintains an internal HTTPX client with connection pools.
+        Closing it properly prevents 'TCPTransport closed' errors during shutdown.
+        """
+        try:
+            if hasattr(self, '_judge_client') and self._judge_client is not None:
+                self._judge_client.close()
+                logger.debug("judge client closed successfully")
+        except Exception as e:
+            logger.warning(f"Error while closing judge client: {e}")
+
 
 class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
     """
@@ -239,3 +252,16 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
             done=done,
             metadata={},
         )
+
+    def close(self) -> None:
+        """
+        Close both the judge client and user simulator client.
+        This overrides the parent close() to also cleanup the UserSimulator's AsyncOpenAI client.
+        """
+        super().close()
+        try:
+            if hasattr(self, '_user_simulator') and self._user_simulator is not None:
+                self._user_simulator.close_sync()
+                logger.debug("user simulator client closed successfully")
+        except Exception as e:
+            logger.warning(f"Error while closing user simulator client: {e}")

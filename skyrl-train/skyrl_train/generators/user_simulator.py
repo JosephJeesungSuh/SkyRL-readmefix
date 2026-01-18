@@ -138,3 +138,36 @@ class UserSimulator:
             return asyncio.run(self.rewrite(**kwargs))
 
         raise RuntimeError("An event loop is already running; use `await rewrite(...)` instead.")
+
+    async def aclose(self) -> None:
+        """
+        Asynchronously close the OpenAI client and cleanup resources.
+        This should be called when the UserSimulator is no longer needed to ensure
+        proper cleanup of HTTP connections and prevent resource leaks.
+        """
+        try:
+            await self._client.close()
+        except RuntimeError as e:
+            # Ignore "handler is closed" errors - connection already cleaned up
+            if "handler is closed" not in str(e):
+                logger.warning(f"Error while closing UserSimulator client: {e}")
+        except Exception as e:
+            logger.warning(f"Error while closing UserSimulator client: {e}")
+
+    def close_sync(self) -> None:
+        """
+        Synchronously close the OpenAI client.
+        This is intended for call sites that cannot use ``await``. If an event loop
+        is already running, this will log a warning and skip cleanup.
+        """
+        try:
+            asyncio.get_running_loop()
+            logger.warning(
+                "Event loop is already running. Cannot synchronously close client. "
+                "Use `await aclose()` instead or ensure cleanup happens outside the loop."
+            )
+        except RuntimeError: # No event loop running, safe to create one
+            try:
+                asyncio.run(self.aclose())
+            except Exception as e:
+                logger.warning(f"Error during synchronous close: {e}")

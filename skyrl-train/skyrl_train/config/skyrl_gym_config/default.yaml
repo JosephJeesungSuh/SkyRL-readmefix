@@ -43,3 +43,48 @@ collabllm_math_500_multiturn:
       user_template: "User: "
       ai_template: "AI: "
       terminal_signal: "<END_OF_CONVERSATION>"
+    tone: "default"
+
+tau2bench_airline:
+  domain: "airline"
+  task_split: "train"  # train, test, or base
+  solo_mode: false  # true = agent works alone, false = interacts with user simulator
+  user_llm: "gpt-4.1-mini"  # LLM for user simulator (only used if solo_mode=false)
+  user_llm_args:
+    temperature: 0.7
+  max_turns: 30
+
+tau2bench_retail:
+  domain: "retail"
+  task_split: "train"
+  solo_mode: false
+  user_llm: "gpt-4.1-mini"
+  user_llm_args:
+    temperature: 0.7
+  max_turns: 30
+
+tau2bench_telecom:
+  domain: "telecom"
+  task_split: "train"
+  solo_mode: false
+  user_llm: "gpt-4.1-mini"
+  user_llm_args:
+    temperature: 0.7
+  max_turns: 30
+
+tau2bench_mock:
+  domain: "mock"
+  task_split: "train"
+  solo_mode: false
+  user_llm: "gpt-4.1-mini"
+  user_llm_args:
+    temperature: 0.7
+  max_turns: 30
+
+tau2bench_multidomain: # For multidomain, domain is specified in dataset extras
+  task_split: "train"
+  solo_mode: false
+  user_llm: "gpt-4.1-mini"
+  user_llm_args:
+    temperature: 0.7
+  max_turns: 30

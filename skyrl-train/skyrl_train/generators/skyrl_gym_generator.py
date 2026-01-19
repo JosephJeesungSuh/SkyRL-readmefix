@@ -73,13 +73,10 @@ class SkyRLGymGenerator(GeneratorInterface):
         self.generation_prompt_ids = get_generation_prompt_ids(tokenizer) if self.use_conversation_multi_turn else None
 
         ### custom : user simulator
+        # Note: User simulator is configured per environment in skyrl_gym_cfg
+        # and will be instantiated on-demand when needed for prompt rewriting
         self.user_simulator = None
         self.user_simulator_formatting_cfg = None
-        if generator_cfg.user_simulator.enabled:
-            self.user_simulator = UserSimulator.from_config(generator_cfg.user_simulator)
-            self.user_simulator_formatting_cfg = (
-                generator_cfg.user_simulator.formatting
-            ) # includes: user_template, ai_template, terminal_signal
 
         if self.skyrl_gym_cfg.max_env_workers > 0:
             self.env_executor = ThreadPoolExecutor(
@@ -112,6 +109,27 @@ class SkyRLGymGenerator(GeneratorInterface):
                 - self.base_conversation_token_ids[::-1].index(self.tokenizer.eos_token_id)
             )
             self.base_conversation_token_ids = self.base_conversation_token_ids[: last_eos_token_index + 1]
+
+    def __del__(self):
+        """
+        Destructor to cleanup the user simulator client when the generator is destroyed.
+        This ensures that the AsyncOpenAI client used by the user simulator is properly
+        closed, preventing 'TCPTransport closed' errors during shutdown.
+        """
+        self.cleanup()
+
+    def cleanup(self):
+        """
+        Cleanup resources used by the generator. It's safe to call multiple times.
+        """
+        if self.user_simulator is not None:
+            try:
+                self.user_simulator.close_sync()
+                logger.debug("Generator user simulator client closed successfully")
+            except Exception as e:
+                logger.warning(f"Error while closing generator user simulator client: {e}")
+            finally:
+                self.user_simulator = None
 
     def _validate_cfg(self, generator_cfg: DictConfig):
         if getattr(generator_cfg.sampling_params, "logprobs", None) is not None and not generator_cfg.batched:
@@ -148,13 +166,35 @@ class SkyRLGymGenerator(GeneratorInterface):
     async def _rewrite_prompts(
             self,
             messages: List[ConversationType],
+            env_classes: List[str],
             env_extras: List[Dict[str, Any]],
             debug: bool = False,
         ) -> List[ConversationType]:
         """
-        Called at the beginning of multi-turn conversation generation to rewrite the initial prompts
+        Called at the beginning of multi-turn conversation generation to rewrite the initial prompts.
+        User simulator is instantiated on-demand from the skyrl_gym_cfg based on env_class.
         """
-        assert self.user_simulator is not None, "User simulator not initialized but _rewrite_prompts called."
+        # Instantiate user simulator on-demand from the first env_class
+        # (assuming all env_classes in a batch use the same user_simulator config)
+        # TODO: for mixture of env_classes, need to revisit this logic
+        if self.user_simulator is None and len(env_classes) > 0:
+            env_class = env_classes[0]
+            env_config = self.skyrl_gym_cfg.get(env_class, DictConfig({}))
+            user_simulator_cfg = env_config.get("user_simulator")
+
+            if user_simulator_cfg is not None and user_simulator_cfg.get("enabled", False):
+                self.user_simulator = UserSimulator.from_config(user_simulator_cfg)
+                self.user_simulator_formatting_cfg = user_simulator_cfg.formatting
+            else:
+                logger.error(
+                    f"User simulator not enabled for env_class '{env_class}'. "
+                    "Skipping prompt rewriting."
+                )
+                return messages
+
+        if self.user_simulator is None:
+            logger.error("User simulator not initialized. Skipping prompt rewriting.")
+            return messages
 
         _rewrite_tasks = []
         for message, env_extra in zip(messages, env_extras):
@@ -234,9 +274,46 @@ class SkyRLGymGenerator(GeneratorInterface):
         chat_history = copy.deepcopy(prompt)
 
         # init() returns the first prompt to be given to the model, and optional metadata dict
-        chat_history, _ = await self._run_in_executor_if_available(env.init, chat_history)
+        chat_history, metadata = await self._run_in_executor_if_available(env.init, chat_history)
+
+        # For environments that provide a system prompt (e.g., tau2bench with policy),
+        # insert it at the beginning of the chat history
+        if metadata and "domain" in metadata and "tau2--" in metadata["domain"]:
+            # Format the system prompt using tau2-bench's format
+            from tau2.agent.llm_agent import AGENT_INSTRUCTION, SYSTEM_PROMPT
+            system_content = SYSTEM_PROMPT.format(
+                domain_policy=metadata["policy"], agent_instruction=AGENT_INSTRUCTION
+            )
+            # Insert system message at the beginning of chat_history
+            chat_history.insert(0, {"role": "system", "content": system_content})
+            
+            # debugging
+            logger.info(f"chat history: {chat_history}")
+            logger.info(f"tools from metadata: {metadata.get('tools', [])}")
+
         initial_chat_history_length = len(chat_history)
         chat_end_index = len(chat_history)
+
+        # Prepare tools for apply_chat_template
+        # Tools must be in JSON Schema format or None
+        tools_for_template = None
+        if metadata is not None and "tools" in metadata:
+            raw_tools = metadata.get("tools")
+            if raw_tools:
+                # Check if tools are tau2bench Tool objects with openai_schema property
+                if hasattr(raw_tools[0], 'openai_schema'):
+                    # Convert tau2bench Tool objects to JSON Schema format using built-in method
+                    tools_for_template = []
+                    for tool in raw_tools:
+                        # Use tau2bench's built-in openai_schema property
+                        # This returns the proper JSON schema format with full parameter details
+                        tool_schema = tool.openai_schema
+                        tools_for_template.append(tool_schema)
+                    logger.info(f"Converted {len(tools_for_template)} tau2bench tools to JSON Schema format using openai_schema")
+                elif isinstance(raw_tools, list) and len(raw_tools) > 0 and isinstance(raw_tools[0], dict):
+                    # Tools are already in dict format, assume they're JSON schemas
+                    tools_for_template = raw_tools
+
         input_ids = self.tokenizer.apply_chat_template(
             chat_history,
             # If retokenize_chat_history==True, avoid including the generation prompt in both the
@@ -244,6 +321,7 @@ class SkyRLGymGenerator(GeneratorInterface):
             add_generation_prompt=not retokenize_chat_history,
             chat_template=self.custom_chat_template if retokenize_chat_history else None,
             tokenize=True,
+            tools=tools_for_template,
             **self.generator_cfg.chat_template_kwargs,
         )
 
@@ -518,8 +596,13 @@ class SkyRLGymGenerator(GeneratorInterface):
         max_tokens = self.generator_cfg.sampling_params.max_generate_length
         max_input_length = self.generator_cfg.max_input_length
 
-        if self.user_simulator is not None:
-            prompts = await self._rewrite_prompts(prompts, env_extras)
+        # Check if any environment has user_simulator enabled
+        has_user_simulator = any(
+            self.skyrl_gym_cfg.get(env_class, DictConfig({})).get("user_simulator", {}).get("enabled", False)
+            for env_class in env_classes
+        )
+        if has_user_simulator:
+            prompts = await self._rewrite_prompts(prompts, env_classes, env_extras)
 
         if self.batched:
             return await self.generate_batched(
@@ -636,6 +719,42 @@ class SkyRLGymGenerator(GeneratorInterface):
                     )
                     + "\n"
                 )
+
+    @staticmethod
+    def parse_rollout_to_messages(rollout_text: str, model_name: str) -> Optional[List[Dict[str, str]]]:
+        """
+        Parse a rollout string (prompt or response) into a list of message dictionaries.
+        This function converts the chat template format (e.g., <|im_start|>role...content<|im_end|>)
+        back into a list of dictionaries with 'role' and 'content' keys.
+        Args:
+            rollout_text: The rollout text string containing chat template markers
+        Returns:
+            List of dictionaries with 'role' and 'content' keys
+        Example:
+            >>> text = "<|im_start|>system\\nYou are helpful<|im_end|>\\n<|im_start|>user\\nHello<|im_end|>"
+            >>> messages = SkyRLGymGenerator.parse_rollout_to_messages(text, model_name="Qwen/Qwen2.5-1.5B-Instruct")
+            >>> messages
+            [{'role': 'system', 'content': 'You are helpful'}, {'role': 'user', 'content': 'Hello'}]
+        """
+        messages = []
+        if 'qwen' in model_name.lower() and \
+            ('2p5' in model_name.lower() or '2.5' in model_name.lower()) and \
+            'instruct' in model_name.lower():
+            # Pattern to match <|im_start|>role\ncontent<|im_end|>
+            pattern = r'<\|im_start\|>(\w+)\n(.*?)<\|im_end\|>'
+            try:
+                import re
+                matches = re.findall(pattern, rollout_text, re.DOTALL)
+                for role, content in matches:
+                    messages.append({
+                        'role': role.strip(),
+                        'content': content.strip()
+                    })
+            except Exception:
+                return None
+            return messages
+        else:
+            raise NotImplementedError(f"Rollout parsing not implemented for model {model_name}.")
 
     def _zero_reward_if_not_stop(self, rewards: List[float], stop_reasons: List[str]):
         """Sets the reward to 0 if the stop reason is not "stop".

@@ -319,27 +319,30 @@ class BasePPOExp:
 def skyrl_entrypoint(cfg: DictConfig):
     # make sure that the training loop is not run on the head node.
     
-    if cfg.generator.user_simulator.enabled:
+    # Check if any environment has user_simulator enabled and test the connection
+    env_class = cfg.environment.env_class
+    env_config = cfg.environment.skyrl_gym.get(env_class, DictConfig({}))
+    user_simulator_cfg = env_config.get("user_simulator")
+
+    if user_simulator_cfg is not None and user_simulator_cfg.get("enabled", False):
         # check the connection before start
         from skyrl_train.generators.user_simulator import UserSimulator
-        # TODO : move the user_simulator config from hydra cfg to skyrl_gym_config/default.yaml
-        # for unified config management
-        user_simulator = UserSimulator.from_config(cfg.generator.user_simulator)
-        test_output = (
-            user_simulator.rewrite_sync(
-                chat_history = [],
-                task_desc = "question answering",
-                single_turn_prompt = "what is the capital of France?",
-                formatting_cfg = {
-                    "user_template": "User: ",
-                    "ai_template": "AI: ",
-                    "terminal_signal": "<END_OF_CONVERSATION>",
-                },
-                debug=True, model_name=cfg.generator.user_simulator.model_name
+        user_simulator = UserSimulator.from_config(user_simulator_cfg)
+        try:
+            test_output = (
+                user_simulator.rewrite_sync(
+                    chat_history = [],
+                    task_desc = "question answering",
+                    single_turn_prompt = "what is the capital of France?",
+                    formatting_cfg = user_simulator_cfg.formatting,
+                    debug=True, model_name=user_simulator_cfg.model_name
+                )
             )
-        )
-        logger.info(f"User simulator test output: {test_output}")
-        del user_simulator
+            logger.info(f"User simulator test output: {test_output}")
+        finally:
+            # Properly cleanup the client to avoid connection errors
+            user_simulator.close_sync()
+            del user_simulator
 
     exp = BasePPOExp(cfg)
     exp.run()

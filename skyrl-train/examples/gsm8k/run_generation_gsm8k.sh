@@ -19,6 +19,8 @@ uv run --isolated --extra $INFERENCE_BACKEND \
   trainer.logger="$LOGGER" \
   trainer.placement.colocate_all=false \
   generator.backend=$INFERENCE_BACKEND \
+  generator.async_engine=true \
+  generator.batched=false \
   generator.num_inference_engines=$NUM_GPUS \
   generator.inference_engine_tensor_parallel_size=1 \
   generator.gpu_memory_utilization=0.9 \

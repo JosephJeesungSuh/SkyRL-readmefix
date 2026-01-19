@@ -1,6 +1,10 @@
 import ast
 import json
+import warnings
 from typing import Optional, Tuple
+
+warnings.filterwarnings("ignore", category=SyntaxWarning)
+
 
 def _outer_braces_span(s: str) -> Optional[Tuple[int, int]]:
     """

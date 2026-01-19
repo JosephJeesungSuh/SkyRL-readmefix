@@ -233,21 +233,6 @@ generator:
   http_endpoint_port: 8000
   max_turns: 1
 
-  ### custom: Prompt reformulation for user simulation ###
-  user_simulator:
-    enabled: false
-    model_name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
-    base_url: "http://localhost:{port}/v1"
-    is_local: true
-    local_port: 8002
-    system_prompt_filepath: "user_simulator_prompt.py"
-    temperature: 0.7
-    default_task_desc: "question answering"
-    formatting:
-      user_template: "User: "
-      ai_template: "AI: "
-      terminal_signal: "<END_OF_CONVERSATION>"
-
   # chat template configuration
   chat_template:
     source: "name"  # "name" or "file"

@@ -46,3 +46,28 @@ register(
     id="collabllm_math_500_multiturn",
     entry_point="skyrl_gym.envs.collabllm.env:CollabLLMLLMJudgeMultiTurnEnv",
 )
+
+register(
+    id="tau2bench_airline",
+    entry_point="skyrl_gym.envs.tau2bench.env:Tau2BenchEnv",
+)
+
+register(
+    id="tau2bench_retail",
+    entry_point="skyrl_gym.envs.tau2bench.env:Tau2BenchEnv",
+)
+
+register(
+    id="tau2bench_telecom",
+    entry_point="skyrl_gym.envs.tau2bench.env:Tau2BenchEnv",
+)
+
+register(
+    id="tau2bench_mock",
+    entry_point="skyrl_gym.envs.tau2bench.env:Tau2BenchEnv",
+)
+
+register(
+    id="tau2bench_multidomain",
+    entry_point="skyrl_gym.envs.tau2bench.env:Tau2BenchMultiDomainEnv",
+)

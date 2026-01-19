@@ -13,9 +13,11 @@ from skyrl_gym.envs.base_text_env import (
     ConversationType,
 )
 from skyrl_gym.envs.collabllm.llm_as_a_judge_prompt import JUDGE_PROMPT
+from skyrl_train.generators.user_simulator import UserSimulator
 from skyrl_train.generators.user_simulator_custom_utils import extract_outer_dict
-from skyrl_train.generators.user_simulator_prompt import USER_SIM_SYSPROMPT
-from skyrl_train.generators.user_simulator import usersim_stringfy
+
+logger.disable("httpx")
+logger.disable("httpcore")
 
 
 def _format_hist_conversation(conversation):
@@ -129,6 +131,19 @@ class CollabLLMLLMJudgeEnv(BaseTextEnv):
         self._conversation.append({"role": "assistant", "content": action})
         return BaseTextEnvStepOutput(observations=[], reward=reward, done=done, metadata={})
 
+    def close(self) -> None:
+        """
+        Close the OpenAI judge client and cleanup resources.
+        The OpenAI client maintains an internal HTTPX client with connection pools.
+        Closing it properly prevents 'TCPTransport closed' errors during shutdown.
+        """
+        try:
+            if hasattr(self, '_judge_client') and self._judge_client is not None:
+                self._judge_client.close()
+                logger.debug("judge client closed successfully")
+        except Exception as e:
+            logger.warning(f"Error while closing judge client: {e}")
+
 
 class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
     """
@@ -153,9 +168,10 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
                 local_port: 8002
                 temperature: 0.7
                 formatting:
-                user_template: "User: "
-                ai_template: "AI: "
-                terminal_signal: "<END_OF_CONVERSATION>"
+                    user_template: "User: "
+                    ai_template: "AI: "
+                    terminal_signal: "<END_OF_CONVERSATION>"
+                tone: "default"
         """
         super().__init__(env_config, extras)
 
@@ -163,19 +179,13 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
         assert user_simulator_cfg is not None and user_simulator_cfg.enabled, (
             "user_simulator must be enabled in env_config for multi-turn CollabLLM environment."
         )
-        if user_simulator_cfg.is_local:
-            base_url = user_simulator_cfg.base_url.format(port=user_simulator_cfg.local_port)
-            self._user_simulator_client = OpenAI(base_url=base_url)
-        else:
-            raise NotImplementedError("Only local vllm model is supported for UserSimulator.")
 
-        self._user_simulator_model = user_simulator_cfg.model_name
-        self._user_simulator_temperature = user_simulator_cfg.temperature
+        # Instantiate UserSimulator using the same class used in the generator
+        self._user_simulator = UserSimulator.from_config(user_simulator_cfg)
         self._user_simulator_formatting = user_simulator_cfg.formatting
         self._user_terminal_signal = self._user_simulator_formatting.get(
             "terminal_signal", "<END_OF_CONVERSATION>"
         )
-        self._user_simulator_max_retries = 8
 
         extra_info = extras.get("extra_info", {})
         self._task_desc = extra_info["task_desc"]
@@ -186,51 +196,26 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
         self.turns = 0
         return super().init(prompt)
 
-    def _stringify_conversation_for_user_simulator(self) -> str:
-        return usersim_stringfy(
-            conversation=self._conversation or [],
-            formatting_cfg=self._user_simulator_formatting,
-        )
-
     def _simulate_user_action(self, debug: bool = False) -> str:
-        system_prompt = USER_SIM_SYSPROMPT.format(
-            task_desc=self._task_desc,
-            single_turn_prompt=self._original_query,
-            chat_history=self._stringify_conversation_for_user_simulator(),
-            terminal_signal=self._user_terminal_signal,
-        )
-
-        for attempt in range(1, self._user_simulator_max_retries + 1):
-            try:
-                response_text: Optional[str] = None
-                completion = self._user_simulator_client.chat.completions.create(
-                    model=self._user_simulator_model,
-                    messages=[{"role": "user", "content": system_prompt}],
-                    temperature=self._user_simulator_temperature,
-                )
-                response_text = completion.choices[0].message.content.strip()
-                if debug:
-                    logger.info(f"user simulator input: {system_prompt}")
-                    logger.info(f"user simulator raw response: {response_text}")
-                parsed = extract_outer_dict(response_text)
-                return parsed["response"]
-            except Exception:
-                if response_text is None:
-                    logger.exception(
-                        f"Attempt {attempt}/{self._user_simulator_max_retries}: user simulator failed."
-                    )
-                else:
-                    logger.exception(
-                        f"Attempt {attempt}/{self._user_simulator_max_retries}: extracting user simulator response failed "
-                        f"with content: {response_text}"
-                    )
-                if attempt < self._user_simulator_max_retries:
-                    time.sleep(2 ** (attempt - 1))
-                else:
-                    logger.error(f"User simulator failed after {self._user_simulator_max_retries} attempts.")
-                    return self._user_terminal_signal
-
-        return self._user_terminal_signal
+        """
+        Simulate user action using the UserSimulator class.
+        This ensures consistency with the initial prompt rewriting in the generator.
+        """
+        try:
+            response = self._user_simulator.rewrite_sync(
+                chat_history=self._conversation or [],
+                task_desc=self._task_desc,
+                single_turn_prompt=self._original_query,
+                formatting_cfg=self._user_simulator_formatting,
+                debug=debug,
+            )
+            if response is None:
+                logger.error("User simulator returned None. Using terminal signal.")
+                return self._user_terminal_signal
+            return response
+        except Exception:
+            logger.exception("User simulator failed with exception. Using terminal signal.")
+            return self._user_terminal_signal
 
     def step(self, action: str, debug: bool = False) -> BaseTextEnvStepOutput:
         assert self._conversation is not None, "Environment not initialized with a prompt."
@@ -246,7 +231,7 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
 
         if not done: # has not reached max_turns
             user_reply = self._simulate_user_action(debug=debug)
-            if user_reply.strip() == self._user_terminal_signal:
+            if self._user_terminal_signal in user_reply.strip():
                 done = True
             else:
                 user_message = {"role": "user", "content": user_reply}
@@ -267,3 +252,16 @@ class CollabLLMLLMJudgeMultiTurnEnv(CollabLLMLLMJudgeEnv):
             done=done,
             metadata={},
         )
+
+    def close(self) -> None:
+        """
+        Close both the judge client and user simulator client.
+        This overrides the parent close() to also cleanup the UserSimulator's AsyncOpenAI client.
+        """
+        super().close()
+        try:
+            if hasattr(self, '_user_simulator') and self._user_simulator is not None:
+                self._user_simulator.close_sync()
+                logger.debug("user simulator client closed successfully")
+        except Exception as e:
+            logger.warning(f"Error while closing user simulator client: {e}")

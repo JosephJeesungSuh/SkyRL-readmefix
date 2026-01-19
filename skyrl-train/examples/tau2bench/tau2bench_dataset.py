@@ -1,6 +1,5 @@
 """
 Dataset preparation script for Tau2-Bench environments.
-
 This script loads tasks from tau2-bench's data directory and converts them
 into the format expected by SkyRL training pipeline.
 """
@@ -12,46 +11,35 @@ from typing import Dict, Any, List
 
 import pandas as pd
 
-
 # Tau2-bench data paths
 TAU2_DATA_DIR = Path("/nas/ucb/jjssuh/projs/tau2-bench/data/tau2")
 DOMAINS = ["airline", "retail", "telecom", "mock"]
 
-
 def load_domain_tasks(domain: str, task_split: str = "train") -> List[Dict[str, Any]]:
     """
     Load tasks for a specific domain and split from tau2-bench.
-
     Args:
         domain: Domain name (airline, retail, telecom, mock)
         task_split: Task split to use (train, test, base)
-
     Returns:
         List of task dictionaries
     """
     domain_dir = TAU2_DATA_DIR / "domains" / domain
     tasks_file = domain_dir / "tasks.json"
     split_file = domain_dir / "split_tasks.json"
-
-    # Load all tasks
     with open(tasks_file, "r") as f:
         all_tasks = json.load(f)
-
-    # Load split information
     with open(split_file, "r") as f:
         splits = json.load(f)
-
-    # Get task IDs for this split
     if task_split not in splits:
         raise ValueError(f"Unknown task split: {task_split}. Available: {list(splits.keys())}")
-
     task_ids = splits[task_split]
-
-    # Filter tasks by ID
     tasks = [task for task in all_tasks if task["id"] in task_ids]
-
     return tasks
 
+
+def _pretty_print(data: Any) -> None:
+    print(json.dumps(data, indent=2))
 
 def reformat_task_for_skyrl(
     task: Dict[str, Any],
@@ -60,43 +48,81 @@ def reformat_task_for_skyrl(
 ) -> Dict[str, Any]:
     """
     Convert a tau2-bench task to SkyRL format.
-
     Args:
         task: Task dictionary from tau2-bench
         domain: Domain name
         env_class: Environment class to use
-
     Returns:
         Reformatted task dictionary for SkyRL
+    Note: the _pretty_print example of task structure is as follows:
+    {
+        "id": "0",
+        "description": {
+            "purpose": "Testing that agent refuses to proceed with a cancellation that is not allowed even if User mentions that she had been told she didn't need insurance.",
+            "relevant_policies": null,
+            "notes": null
+        },
+        "user_scenario": {
+            "persona": null,
+            "instructions": {
+            "task_instructions": "If Agent tells you that cancellation is not possible,\nmention that you were told that you didn't need to get insurance because your previous trip was booked with the same agency with insurance.\n\nYou don't want to cancel if you don't get a refund.",
+            "domain": "airline",
+            "reason_for_call": "You want to cancel reservation EHGLP3. \n\nIt may be more than 24 hours after booking, but it is ok because you were out of town for that time.",
+            "known_info": "You are Emma Kim.\nYour user id is emma_kim_9957.",
+            "unknown_info": null
+            }
+        },
+        "initial_state": null,
+        "evaluation_criteria": {
+            "actions": [],
+            "communicate_info": [],
+            "nl_assertions": [
+            "Agent should refuse to proceed with the cancellation."
+            ]
+        },
+        "annotations": null
+    }, the the sceneario description the the user simulator looks like:
+    <scenario>
+    Instructions:
+        Domain: airline -- return.extra_info.domain
+        Reason for call: -- return.extra_info.reason_for_call
+            You want to cancel reservation EHGLP3. 
+        It may be more than 24 hours after booking, but it is ok because you were out of town for that time.
+        Known info: -- return.extra_info.known_info
+            You are Emma Kim.
+            Your user id is emma_kim_9957.
+        Task instructions: -- return.extra_info.task_instructions
+            If Agent tells you that cancellation is not possible,
+            mention that you were told that you didn't need to get insurance because your previous trip was booked with the same agency with insurance.
+
+            You don't want to cancel if you don't get a refund.
+    </scenario>
     """
-    task_id = task["id"]
-
-    # Create initial prompt based on user scenario
-    # In tau2-bench, the user simulator handles the initial message
-    # So we typically start with an empty prompt or system message
-    initial_prompt = []
-
     # Extract user scenario info for metadata
     user_scenario = task.get("user_scenario", {})
     instructions = user_scenario.get("instructions", {})
 
     return {
         "data_source": f"tau2bench-{domain}",
-        "prompt": initial_prompt,
+        # In tau2-bench, the user simulator handles the initial conversation
+        "prompt": [{"role": "user", "content": 'DUMMY'}],
+        # env_class example : 'tau2bench_airline'
         "env_class": env_class,
-        "task_id": task_id,  # Critical: tau2-bench needs this to load the task
-        "domain": domain,  # For multi-domain environments
-        "reward_spec": {
-            "method": "tau2bench",  # Reward comes from tau2-bench evaluation
-        },
+        "reward_spec": {"method": "tau2bench"}, # Reward comes from tau2-bench evaluation
         "extra_info": {
-            "task_id": task_id,
+            # task unique id
+            "task_id": task["id"],
+            # formulating user simulator system prompt
             "domain": domain,
-            "task_description": task.get("description", {}),
+            "reason_for_call": instructions.get("reason_for_call"),
+            "known_info": instructions.get("known_info"),
+            "task_instructions": instructions.get("task_instructions"),
+            # all other info originally in the task
+            "description": task.get("description", {}),
             "user_scenario": user_scenario,
-            "reason_for_call": instructions.get("reason_for_call", ""),
-            "known_info": instructions.get("known_info", ""),
-            "evaluation_criteria": task.get("evaluation_criteria", {}),
+            "initial_state": task.get("initial_state"),
+            "evaluation_criteria": task.get("evaluation_criteria"),
+            "annotations": task.get("annotations"),
         },
     }
 

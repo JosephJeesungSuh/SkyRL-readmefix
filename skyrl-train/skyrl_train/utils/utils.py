@@ -577,6 +577,10 @@ def prepare_runtime_environment(cfg: DictConfig) -> dict[str, str]:
         logger.info(f"Exporting `PYTHONPATH` to ray runtime env: {os.environ['PYTHONPATH']}")
         env_vars["PYTHONPATH"] = os.environ["PYTHONPATH"]
 
+    if os.environ.get("TAU2_DATA_DIR"): # custom envvar for tau2bench
+        logger.info("Exporting TAU2_DATA_DIR to ray runtime env")
+        env_vars["TAU2_DATA_DIR"] = os.environ["TAU2_DATA_DIR"]
+
     return env_vars
 
 

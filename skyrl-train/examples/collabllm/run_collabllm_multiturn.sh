@@ -10,18 +10,17 @@ set -x
 
 # You can override the default values with e.g.: `NUM_GPUS=1 bash examples/gsm8k/run_gsm8k.sh`.
 
+# configs that is unlikely to be changed
 : "${DATA_DIR:="$HOME/data/collabllm"}"
-: "${NUM_GPUS:=2}"
-: "${LOGGER:=wandb}" # change to "console" to print to stdout
-
+: "${LOGGER:=wandb}"
 : "${INFERENCE_BACKEND:=vllm}"
-# : "${INFERENCE_BACKEND:=sglang}"
-
 : "${MAX_TURNS:=4}"
 
-## always make sure no space after the backslash `\` at the end of the line
-# environment.env_class=gsm8k \
+# configs that often change
+: "${NUM_GPUS:=2}"
+: "${TONE:=angry}"
 
+## Important: always make sure no space after the backslash `\` at the end of the line
 uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_base \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
@@ -47,14 +46,15 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   trainer.algorithm.use_kl_loss=true \
   trainer.logger="$LOGGER" \
   trainer.project_name="collabllm-test--qwen2p5-1p5b" \
-  trainer.run_name="collabllm_test_multiturn" \
+  trainer.run_name="collabllm_test_multiturn--training-with-angry" \
   trainer.resume_mode=latest \
-  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_1.5B_ckpt" \
+  trainer.ckpt_path="$HOME/ckpts/collabllm_qwen2p5_1.5B_ckpt_training_with_angry" \
   generator.sampling_params.max_generate_length=4096 \
   generator.num_inference_engines=$NUM_GPUS \
   generator.inference_engine_tensor_parallel_size=1 \
   generator.backend=$INFERENCE_BACKEND \
   generator.n_samples_per_prompt=5 \
+  generator.eval_n_samples_per_prompt=5 \
   generator.gpu_memory_utilization=0.8 \
   generator.run_engines_locally=true \
   generator.weight_sync_backend=nccl \
@@ -63,7 +63,7 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   generator.use_conversation_multi_turn=true \
   generator.max_turns=$MAX_TURNS \
   generator.max_input_length=8192 \
-  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm_multiturn_qwen2p5_1p5b.jsonl" \
+  generator.rollout_log_path="$HOME/ckpts/rollout_logs/test_rollouts_collabllm_multiturn_qwen2p5_1p5b_training_with_angry.jsonl" \
   environment.env_class=collabllm_math_500_multiturn \
   environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.enabled=true \
   environment.skyrl_gym.collabllm_math_500_multiturn.llm_judge.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \
@@ -73,4 +73,5 @@ uv run --isolated --extra $INFERENCE_BACKEND -m skyrl_train.entrypoints.main_bas
   environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.model_name="mistralai/Mistral-Small-3.1-24B-Instruct-2503" \
   environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.is_local=true \
   environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.local_port=8002 \
+  environment.skyrl_gym.collabllm_math_500_multiturn.user_simulator.tone="$TONE" \
   $@
